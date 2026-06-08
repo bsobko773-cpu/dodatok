@@ -79,7 +79,16 @@
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex justify-center items-start overflow-x-hidden">
-
+window.onload = function() {
+    const params = new URLSearchParams(window.location.search);
+    const syncData = params.get('sync');
+    if (syncData) {
+        const decoded = atob(syncData); // Розкодовуємо
+        localStorage.setItem('gameData', decoded); // Зберігаємо дані сина
+        alert("Дані успішно отримані!");
+        window.location.href = window.location.pathname; // Очищуємо посилання
+    }
+};
     <!-- Main Vertically Responsive Layout Wrapper -->
     <div class="w-full max-w-md min-h-screen flex flex-col bg-slate-900 border-x border-slate-800 relative mx-auto pb-24 shadow-2xl">
         
@@ -1199,7 +1208,12 @@
 
             return mult;
         }
-
+        function generateLink() {
+    const saveData = localStorage.getItem('gameData'); // Твої дані
+    const encoded = btoa(saveData); // Кодуємо в текст
+    const url = window.location.origin + window.location.pathname + '?sync=' + encoded;
+    prompt("Скопіюй це посилання і надішліть Мамі:", url);
+}
         function renderQuests() {
             const container = document.getElementById('quests-container');
             container.innerHTML = '';
