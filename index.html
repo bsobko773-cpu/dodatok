@@ -1,0 +1,2288 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CyberCore RPG</title>
+    <!-- Tailwind CSS for utility styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PeerJS for direct device-to-device direct connection -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --accent: #0ea5e9;
+            --accent-glow: rgba(14, 165, 233, 0.4);
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        h1, h2, h3, .cyber-font {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .neon-border {
+            border: 1px solid var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+        .neon-text {
+            color: var(--accent);
+            text-shadow: 0 0 5px var(--accent-glow);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent);
+            border-radius: 2px;
+        }
+        /* Roulette container styling */
+        .roulette-container {
+            width: 100%;
+            height: 90px;
+            overflow: hidden;
+            position: relative;
+            background: #0f172a;
+            border-radius: 0.75rem;
+            border: 2px solid var(--accent);
+        }
+        .roulette-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background-color: #ef4444;
+            z-index: 20;
+            box-shadow: 0 0 8px #ef4444;
+        }
+        .roulette-track {
+            display: flex;
+            height: 100%;
+            transition: transform 3.5s cubic-bezier(0.1, 0.8, 0.1, 1);
+        }
+        .roulette-item {
+            min-width: 80px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-right: 1px solid #1e293b;
+            background: #1e293b;
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex justify-center items-start overflow-x-hidden">
+
+    <!-- Main Vertically Responsive Layout Wrapper -->
+    <div class="w-full max-w-md min-h-screen flex flex-col bg-slate-900 border-x border-slate-800 relative mx-auto pb-24 shadow-2xl">
+        
+        <!-- Header Section -->
+        <header class="bg-slate-950/80 backdrop-blur-md border-b border-slate-800 p-4 sticky top-0 z-40">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center space-x-2">
+                    <div id="status-led" class="w-3.5 h-3.5 rounded-full bg-yellow-500 shadow-[0_0_8px_#eab308]" title="Статус мережі"></div>
+                    <h1 class="cyber-font text-lg font-bold uppercase tracking-wider text-sky-400" id="header-logo">Cyber<span class="text-white">Core</span></h1>
+                </div>
+                <div class="text-right">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest">Баланс СР</div>
+                    <div class="cyber-font text-xl font-black text-yellow-400 flex items-center justify-end">
+                        <span id="cp-display">0</span> <span class="text-xs ml-1 text-yellow-500">CP</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- XP & Level Progress Bar -->
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs font-semibold text-slate-400">
+                    <span class="cyber-font">Рівень <span id="level-display" class="text-sky-400">1</span> [<span id="rank-display">Snoop</span>]</span>
+                    <span><span id="xp-current">0</span> / <span id="xp-needed">100</span> XP</span>
+                </div>
+                <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                    <div id="xp-bar" class="bg-gradient-to-r from-sky-500 to-indigo-500 h-full w-0 transition-all duration-300"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Overlay / Alerts replacing browser alerts/confirm/prompts -->
+        <div id="custom-modal-overlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 hidden justify-center items-center p-4">
+            <div class="bg-slate-900 border-2 border-sky-500 rounded-2xl p-6 w-full max-w-xs text-center shadow-[0_0_30px_rgba(14,165,233,0.3)]">
+                <h3 id="modal-title" class="cyber-font text-lg font-bold text-white mb-2">Увага</h3>
+                <p id="modal-desc" class="text-sm text-slate-300 mb-4">Повідомлення</p>
+                <input type="text" id="modal-input" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-center text-white mb-4 hidden focus:outline-none focus:border-sky-500 font-semibold" placeholder="...">
+                <div class="flex space-x-2">
+                    <button id="modal-btn-cancel" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-semibold text-sm hidden">Скасувати</button>
+                    <button id="modal-btn-ok" class="flex-1 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-lg font-bold text-sm">ОК</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Role Select Onboarding Screen (Initial Launch) -->
+        <div id="onboarding-screen" class="absolute inset-0 bg-slate-950 z-50 flex flex-col justify-center items-center p-6 space-y-6 hidden">
+            <h2 class="cyber-font text-3xl font-black text-sky-400 tracking-widest text-center">CYBER<span class="text-white">CORE</span></h2>
+            <p class="text-slate-400 text-center text-sm">Ласкаво просимо в сільську кібер-RPG. Будь ласка, оберіть вашу роль на цьому пристрої.</p>
+            <div class="w-full space-y-4" id="role-select-buttons">
+                <button onclick="selectRole('son')" class="w-full py-4 bg-slate-900 hover:bg-slate-850 border border-sky-500 rounded-xl text-lg font-bold text-white text-center shadow-[0_0_15px_rgba(14,165,233,0.3)] block">👦 Я — СИН (Гравець)</button>
+                <button onclick="showMomPinSetup()" class="w-full py-4 bg-slate-900 hover:bg-slate-850 border border-fuchsia-500 rounded-xl text-lg font-bold text-white text-center shadow-[0_0_15px_rgba(217,70,239,0.3)] block">👩 Я — МАМА (Контролер)</button>
+            </div>
+            <div class="w-full space-y-4 hidden" id="mom-pin-setup-box">
+                <p class="text-center text-xs text-fuchsia-400">Придумайте 4-значний PIN-код для входу:</p>
+                <input type="password" id="mom-setup-pin-input" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-center text-white text-2xl tracking-[12px] font-bold focus:outline-none focus:border-fuchsia-500" placeholder="••••" maxlength="4">
+                <button onclick="selectRole('mom')" class="w-full py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold rounded-lg text-sm">Зберегти та увійти</button>
+            </div>
+        </div>
+
+        <!-- Main Content Screens by Tab -->
+        <main class="flex-1 p-4 overflow-y-auto space-y-4">
+
+            <!-- TAB: QUESTS -->
+            <div id="tab-quests" class="tab-content space-y-4">
+                <!-- Status Banners (Goal, Weather, Buffs) -->
+                <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest">Глобальна Мега-Ціль від Мами:</div>
+                    <div id="global-goal-display" class="text-sm font-bold text-white">Стати справжнім господарем двору!</div>
+                    <div id="global-goal-progress-container" class="space-y-1 pt-1 hidden">
+                        <div class="flex justify-between text-[10px] text-slate-400 font-semibold">
+                            <span>Прогрес внесків</span>
+                            <span><span id="goal-current">0</span> / <span id="goal-target">0</span> СР</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                            <div id="goal-bar" class="bg-fuchsia-500 h-full w-0 transition-all duration-300"></div>
+                        </div>
+                        <div id="son-invest-box" class="flex space-x-1.5 pt-1.5">
+                            <input type="number" id="son-invest-amount" placeholder="Сума CP" class="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-center text-white focus:outline-none">
+                            <button onclick="investInGoal()" class="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-2.5 py-1 rounded">Вкласти в Мега-Ціль</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-center">
+                        <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">🌦️ Погода</div>
+                        <div id="weather-display" class="text-xs font-bold text-sky-400">🌤️ Ясно</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-center">
+                        <div class="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">🔥 Щоденний Стрік</div>
+                        <div id="streak-display" class="text-xs font-bold text-orange-400">Стрік: 0 днів</div>
+                    </div>
+                </div>
+
+                <!-- Custom Info Banner for Synergies -->
+                <div id="synergy-banner" class="bg-indigo-950/40 border border-indigo-900/50 p-3 rounded-xl text-xs space-y-1 text-indigo-200">
+                    <div class="font-bold flex items-center">✨ Синергія та Ефекти:</div>
+                    <div id="weather-effect" class="text-slate-300">Активний погодний режим не виявлено.</div>
+                    <div id="pets-buff" class="text-emerald-400 font-semibold">Тварини ситі на 100%! +20% CP до їх квестів.</div>
+                </div>
+
+                <!-- Daily / Special Filter Buttons -->
+                <div class="flex space-x-2">
+                    <button onclick="filterQuests('daily')" id="btn-filter-daily" class="flex-1 py-1.5 text-xs font-bold rounded-lg bg-sky-600 text-slate-950 shadow-[0_0_10px_rgba(14,165,233,0.3)]">Щоденні Квести</button>
+                    <button onclick="filterQuests('special')" id="btn-filter-special" class="flex-1 py-1.5 text-xs font-bold rounded-lg bg-slate-800 text-slate-400">Спец-Місії</button>
+                </div>
+
+                <!-- Quests Holder List -->
+                <div id="quests-container" class="space-y-3">
+                    <!-- Dynamic quests list -->
+                </div>
+            </div>
+
+            <!-- TAB: ECONOMY -->
+            <div id="tab-economy" class="tab-content hidden space-y-4">
+                <h2 class="cyber-font text-lg text-sky-400 tracking-wide uppercase border-b border-slate-800 pb-1">Банк & Бізнес-Імперія</h2>
+                
+                <!-- Core Bank Module -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
+                    <h3 class="font-bold text-yellow-400 text-sm tracking-wider uppercase flex items-center justify-between">
+                        <span>🏦 Core Bank</span>
+                    </h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                            <div class="text-[10px] text-slate-400 uppercase tracking-widest">Депозит (+5%/день)</div>
+                            <div id="bank-deposit" class="font-black text-emerald-400 tracking-wide mt-0.5">0 CP</div>
+                            <div class="flex space-x-1.5 mt-2">
+                                <button onclick="bankAction('deposit', 'add')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs font-bold py-1 rounded">+</button>
+                                <button onclick="bankAction('deposit', 'take')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-1 rounded">-</button>
+                            </div>
+                        </div>
+                        <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                            <div class="text-[10px] text-slate-400 uppercase tracking-widest">Кредит (-10%/день)</div>
+                            <div id="bank-credit" class="font-black text-rose-500 tracking-wide mt-0.5">0 CP</div>
+                            <div class="flex space-x-1.5 mt-2">
+                                <button onclick="bankAction('credit', 'take')" class="flex-1 bg-rose-600/30 hover:bg-rose-600/40 text-rose-400 border border-rose-500/40 text-xs font-bold py-1 rounded">Взяти</button>
+                                <button onclick="bankAction('credit', 'pay')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-1 rounded">Гасити</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Passive Income / Business Module -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase">🏭 Бізнес-Імперія</h3>
+                        <button onclick="collectBusinessIncome()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-lg shadow-[0_0_10px_rgba(16,185,129,0.3)]">Зібрати прибуток</button>
+                    </div>
+                    <div class="text-xs text-slate-400 flex justify-between items-center bg-slate-900 p-2 rounded-lg border border-slate-800">
+                        <span>Накопичено в сейфі:</span>
+                        <span id="unclaimed-income" class="text-yellow-400 font-bold text-sm tracking-wide">0 CP</span>
+                    </div>
+                    
+                    <div id="business-list" class="space-y-2">
+                        <!-- Businesses render here -->
+                    </div>
+                </div>
+
+                <!-- Lootbox Box Module -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
+                    <h3 class="font-bold text-fuchsia-400 text-sm tracking-wider uppercase">🎁 Кібер-Кейс (150 CP)</h3>
+                    
+                    <div class="roulette-container hidden" id="roulette-box">
+                        <div class="roulette-line"></div>
+                        <div class="roulette-track" id="roulette-track"></div>
+                    </div>
+                    
+                    <button onclick="openCase()" id="btn-open-case" class="w-full py-2.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-slate-950 font-black rounded-lg shadow-[0_0_15px_rgba(217,70,239,0.4)] tracking-wide transition">Відкрити Кейс</button>
+                </div>
+
+                <!-- Wheel of Destiny & Net Breach Game -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="spinWheel()" id="btn-wheel" class="py-2.5 bg-violet-600/30 border border-violet-500/50 hover:bg-violet-600/40 text-violet-300 font-bold text-xs rounded-xl flex flex-col justify-center items-center space-y-1">
+                        <span>🎡 Колесо Фортуни</span>
+                        <span id="wheel-timer" class="text-[10px] text-slate-400">Раз на 12 годин</span>
+                    </button>
+                    <button onclick="startBreach()" id="btn-breach" class="py-2.5 bg-emerald-600/30 border border-emerald-500/50 hover:bg-emerald-600/40 text-emerald-300 font-bold text-xs rounded-xl flex flex-col justify-center items-center space-y-1">
+                        <span>🌐 Злом Мережі</span>
+                        <span class="text-[10px] text-slate-400">Клікер-хакінг</span>
+                    </button>
+                </div>
+
+                <!-- Interactive Mini-game modal / overlay inside economy screen -->
+                <div id="breach-container" class="bg-slate-950 border border-emerald-500 rounded-xl p-4 text-center space-y-3 hidden">
+                    <h3 class="cyber-font text-xs text-emerald-400 font-bold uppercase tracking-widest">Breach System Core</h3>
+                    <div class="flex justify-between text-xs text-slate-400 font-semibold px-2">
+                        <span>Час: <span id="breach-timer" class="text-white">10</span> сек</span>
+                        <span>Кліки: <span id="breach-clicks" class="text-white">0</span> / 30</span>
+                    </div>
+                    <div class="relative h-24 flex items-center justify-center bg-slate-900 rounded-lg overflow-hidden border border-slate-800">
+                        <button id="breach-node" onclick="registerBreachClick()" class="absolute w-12 h-12 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.6)]">CORE</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: PETS -->
+            <div id="tab-pets" class="tab-content hidden space-y-4">
+                <h2 class="cyber-font text-lg text-sky-400 tracking-wide uppercase border-b border-slate-800 pb-1">Кібер-Фамільяри</h2>
+                <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs text-slate-400">
+                    Утримуйте ситість тварин на рівні 100%, щоб отримати додатковий приріст <span class="text-emerald-400 font-bold">+20% до нагороди CP</span> за всі квести, що з ними пов'язані!
+                </div>
+                
+                <div id="pets-container" class="space-y-4">
+                    <!-- Dynamic pets lists -->
+                </div>
+            </div>
+
+            <!-- TAB: CHAT (SON VIEW) -->
+            <div id="tab-chat" class="tab-content hidden space-y-4">
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col h-[400px] space-y-2">
+                    <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">💬 Секретний Чат з Мамою</h3>
+                    <div id="son-chat-messages" class="flex-1 overflow-y-auto bg-slate-900 p-2 rounded-lg border border-slate-800 space-y-2 text-xs">
+                        <!-- Messages -->
+                    </div>
+                    <div class="grid grid-cols-3 gap-1">
+                        <button onclick="sendQuickPhrase('Мам, перевір квест!')" class="py-1 bg-slate-800 text-[9px] rounded text-slate-300">Перевір квест</button>
+                        <button onclick="sendQuickPhrase('Іду на город!')" class="py-1 bg-slate-800 text-[9px] rounded text-slate-300">Іду на город</button>
+                        <button onclick="sendQuickPhrase('Тварини ситі!🐾')" class="py-1 bg-slate-800 text-[9px] rounded text-slate-300">Тварини ситі</button>
+                    </div>
+                    <div class="flex space-x-1.5">
+                        <input type="text" id="son-chat-input" placeholder="Повідомлення..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 text-xs text-white focus:outline-none">
+                        <button onclick="sendChatMessageSon()" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg">Надіслати</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: MOM -->
+            <div id="tab-mom" class="tab-content hidden space-y-4">
+                
+                <!-- Lock Screen Overlay inside Mom Tab -->
+                <div id="mom-pin-screen" class="bg-slate-950 border border-slate-800 p-6 rounded-2xl text-center space-y-4">
+                    <h2 class="cyber-font text-lg text-white font-bold uppercase tracking-wider">Доступ Матері</h2>
+                    <p class="text-xs text-slate-400">Будь ласка, введіть 4-значний PIN-код для управління грою.</p>
+                    <input type="password" id="mom-pin-input" class="w-full max-w-[160px] mx-auto bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-center text-white text-2xl tracking-[12px] font-bold focus:outline-none focus:border-sky-500" placeholder="••••" maxlength="4">
+                    <button onclick="checkMomPin()" class="w-full py-2.5 bg-sky-600 hover:bg-sky-500 text-slate-950 rounded-lg font-bold text-sm">Увійти</button>
+                </div>
+
+                <!-- Mom Control Panel Dashboard -->
+                <div id="mom-dashboard" class="hidden space-y-4">
+                    <h2 class="cyber-font text-lg text-fuchsia-400 tracking-wide uppercase border-b border-slate-800 pb-1">Панель Матері</h2>
+                    
+                    <!-- Pending Approvals Section for Mom -->
+                    <div class="bg-slate-950 border border-yellow-500/50 p-3 rounded-xl space-y-2">
+                        <h3 class="font-bold text-yellow-400 text-xs tracking-wider uppercase">⌛ Очікують перевірки</h3>
+                        <div id="mom-pending-quests-container" class="space-y-2">
+                            <!-- Pending quests will render here dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Direct Peer Connection and Sync Panel -->
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2.5">
+                        <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">📡 Мережевий Синхро-Хаб</h3>
+                        <div class="text-[10px] text-slate-400">Твій Peer ID (відправ сину): <span id="my-peer-id" class="font-mono text-white bg-slate-900 px-1 py-0.5 rounded ml-1 tracking-wider select-all">Створюється...</span></div>
+                        <div class="flex space-x-1.5">
+                            <input type="text" id="connect-to-id" placeholder="ID сина" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 text-xs text-white focus:outline-none">
+                            <button onclick="connectToPeer()" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg">З'єднати</button>
+                        </div>
+                        
+                        <!-- Offline Sync Section (Fallback) -->
+                        <div class="pt-2 border-t border-slate-900 flex space-x-1.5">
+                            <button onclick="exportProgressCode()" class="flex-1 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-700 text-[10px] font-semibold">Копіювати Код</button>
+                            <button onclick="importProgressCode()" class="flex-1 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-700 text-[10px] font-semibold">Вставити Код</button>
+                        </div>
+                    </div>
+
+                    <!-- Instant Microtransactions -->
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2.5">
+                        <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">💰 Експрес Нагороди та Штрафи</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="momAction('reward')" class="bg-emerald-600/30 border border-emerald-500 text-emerald-400 font-bold py-1.5 text-xs rounded-lg hover:bg-emerald-600/40">Премія +50 CP</button>
+                            <button onclick="momAction('penalty')" class="bg-rose-600/30 border border-rose-500 text-rose-400 font-bold py-1.5 text-xs rounded-lg hover:bg-rose-600/40">Штраф -50 CP</button>
+                        </div>
+                    </div>
+
+                    <!-- Goal, Weather, Mood config -->
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-3">
+                        <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">🛠️ Конфігурація Світу</h3>
+                        
+                        <!-- Mood Slider -->
+                        <div class="space-y-1 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                            <div class="text-[10px] text-slate-400 flex justify-between">
+                                <span>Настрій Матері:</span>
+                                <span id="mom-mood-label" class="font-bold text-sky-400">😄 Щаслива (+15% CP)</span>
+                            </div>
+                            <div class="flex space-x-1.5 pt-1">
+                                <button onclick="setMomMood('happy')" id="mood-btn-happy" class="flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded">Щаслива</button>
+                                <button onclick="setMomMood('neutral')" id="mood-btn-neutral" class="flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded">Звичайна</button>
+                                <button onclick="setMomMood('angry')" id="mood-btn-angry" class="flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded">Сердита</button>
+                            </div>
+                        </div>
+
+                        <!-- Megagoal input -->
+                        <div class="space-y-1.5">
+                            <label class="text-[10px] text-slate-400 uppercase tracking-widest">Встановити Мега-Ціль:</label>
+                            <div class="flex space-x-1.5">
+                                <input type="text" id="mom-goal-name" placeholder="Приклад: Новий Скейт" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none">
+                                <input type="number" id="mom-goal-price" placeholder="Вартість" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-center text-white focus:outline-none">
+                                <button onclick="setGlobalGoal()" class="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs px-3 py-1 rounded-lg">Задати</button>
+                            </div>
+                        </div>
+
+                        <!-- Weather set buttons -->
+                        <div class="space-y-1.5">
+                            <label class="text-[10px] text-slate-400 uppercase tracking-widest">Зміна Погоди:</label>
+                            <div class="flex space-x-2">
+                                <button onclick="setWeather('sunny')" id="weather-btn-sunny" class="flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg">☀️ Ясно</button>
+                                <button onclick="setWeather('rain')" id="weather-btn-rain" class="flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg">🌧️ Дощ</button>
+                                <button onclick="setWeather('heat')" id="weather-btn-heat" class="flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg">🔥 Спека</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Promocodes Generator -->
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2">
+                        <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">🎫 Генератор Промокодів</h3>
+                        <div class="flex space-x-1.5">
+                            <input type="text" id="mom-promo-code" placeholder="Код (напр. SUPERSON)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none uppercase">
+                            <input type="number" id="mom-promo-cp" placeholder="СР" class="w-14 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center text-white focus:outline-none">
+                            <button onclick="generatePromoCode()" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold text-xs px-3 py-1 rounded-lg">Створити</button>
+                        </div>
+                        <div id="active-promocodes" class="text-[10px] text-slate-400">Активні коди: немає</div>
+                    </div>
+
+                    <!-- Custom Quest Creator (Supports templates) -->
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2.5">
+                        <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">📝 Створення Нового Квесту</h3>
+                        
+                        <!-- Predefined Template templates -->
+                        <div class="space-y-1">
+                            <label class="text-[10px] text-slate-400 uppercase tracking-widest">Вибрати шаблон:</label>
+                            <select id="quest-template-select" onchange="loadQuestTemplate()" class="bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-white w-full">
+                                <option value="">-- Власний квест --</option>
+                                <option value="t1">🧼 Допомогти помити вікна (Спец, 100 СР)</option>
+                                <option value="t2">🥕 Зібрати врожай на городі (Спец, 80 СР)</option>
+                                <option value="t3">📚 Вивчити уроки / правила (Щоденний, 40 СР)</option>
+                                <option value="t4">🧹 Прибрати в коморі (Спец, 90 СР)</option>
+                            </select>
+                        </div>
+
+                        <input type="text" id="new-task-name" placeholder="Назва завдання" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none">
+                        
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="number" id="new-task-cp" placeholder="СР" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:outline-none">
+                            <input type="number" id="new-task-xp" placeholder="XP" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:outline-none">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <label class="flex items-center space-x-1 bg-slate-900 p-1.5 rounded-lg border border-slate-800 justify-center">
+                                <input type="radio" name="new-task-type" value="daily" checked>
+                                <span>Щоденний</span>
+                            </label>
+                            <label class="flex items-center space-x-1 bg-slate-900 p-1.5 rounded-lg border border-slate-800 justify-center">
+                                <input type="radio" name="new-task-type" value="special">
+                                <span>Спец-місія</span>
+                            </label>
+                        </div>
+
+                        <button onclick="createNewQuest()" class="w-full py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-slate-950 font-bold rounded-lg text-xs">Опублікувати завдання</button>
+                    </div>
+
+                    <!-- Secret P2P Chat Room -->
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl flex flex-col h-64 space-y-2">
+                        <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">💬 Секретний Чат з Сином</h3>
+                        <div id="chat-messages" class="flex-1 overflow-y-auto bg-slate-900 p-2 rounded-lg border border-slate-800 space-y-2 text-xs">
+                            <!-- Messages -->
+                        </div>
+                        <div class="grid grid-cols-3 gap-1">
+                            <button onclick="sendQuickPhrase('Мам, перевір квест!')" class="py-1 bg-slate-800 text-[9px] rounded text-slate-300">Перевір квест</button>
+                            <button onclick="sendQuickPhrase('Іду на город!')" class="py-1 bg-slate-800 text-[9px] rounded text-slate-300">Іду на город</button>
+                            <button onclick="sendQuickPhrase('Тварини ситі!🐾')" class="py-1 bg-slate-800 text-[9px] rounded text-slate-300">Тварини ситі</button>
+                        </div>
+                        <div class="flex space-x-1.5">
+                            <input type="text" id="chat-input" placeholder="Повідомлення..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 text-xs text-white focus:outline-none">
+                            <button onclick="sendChatMessage()" class="bg-fuchsia-600 hover:bg-fuchsia-500 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg">Надіслати</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: PROFILE / SETTINGS -->
+            <div id="tab-profile" class="tab-content hidden space-y-4">
+                <h2 class="cyber-font text-lg text-sky-400 tracking-wide uppercase border-b border-slate-800 pb-1">Профіль & Магазин</h2>
+                
+                <!-- Inventory & Items Module -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
+                    <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase">🎒 Мій Кібер-Інвентар</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-slate-900 p-2 rounded-lg border border-slate-800 flex justify-between items-center">
+                            <div>
+                                <div class="text-xs font-bold text-white">🥫 Енергетик</div>
+                                <div class="text-[9px] text-slate-400">Авто-виконання 1 квесту</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xs font-bold text-sky-400">x<span id="inv-energy">0</span></div>
+                                <button onclick="useItem('energy')" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold text-[9px] px-1.5 py-0.5 rounded mt-1">Використати</button>
+                            </div>
+                        </div>
+                        <div class="bg-slate-900 p-2 rounded-lg border border-slate-800 flex justify-between items-center">
+                            <div>
+                                <div class="text-xs font-bold text-white">🍀 Конюшина</div>
+                                <div class="text-[9px] text-slate-400">х2 CP на наступний квест</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xs font-bold text-sky-400">x<span id="inv-luck">0</span></div>
+                                <button onclick="useItem('luck')" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold text-[9px] px-1.5 py-0.5 rounded mt-1">Використати</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom P2P Promo Code activation area inside profile tab -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
+                    <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase">🎫 Активувати Промокод</h3>
+                    <div class="flex space-x-1.5">
+                        <input type="text" id="son-promo-input" placeholder="Код від мами" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white uppercase focus:outline-none">
+                        <button onclick="redeemPromoCode()" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg">Активувати</button>
+                    </div>
+                </div>
+
+                <!-- Color themes picker settings -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
+                    <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase">🎨 Кібер-Кольорова Гама</h3>
+                    <div class="grid grid-cols-4 gap-1.5">
+                        <button onclick="changeTheme('cyan')" id="theme-btn-cyan" class="py-1.5 text-[10px] font-bold rounded bg-sky-600 text-slate-950">Неон</button>
+                        <button onclick="changeTheme('emerald')" id="theme-btn-emerald" class="py-1.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400">Матриця</button>
+                        <button onclick="changeTheme('mars')" id="theme-btn-mars" class="py-1.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400">Марс</button>
+                        <button onclick="changeTheme('purple')" id="theme-btn-purple" class="py-1.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400">Пурпур</button>
+                    </div>
+                </div>
+
+                <!-- CP Shop & Real payout items -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
+                    <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase border-b border-slate-800 pb-1">🛒 Магазин Нагород</h3>
+                    
+                    <div class="space-y-2">
+                        <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex justify-between items-center text-xs">
+                            <div>
+                                <div class="font-bold text-white">1 Година в Телефоні</div>
+                                <div class="text-[10px] text-slate-400">Ключ розблокування екрану</div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="font-bold text-yellow-400">100 СР</span>
+                                <button onclick="buyReward('1 година в телефоні', 100)" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold py-1 px-2.5 rounded text-[10px]">Купити</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex justify-between items-center text-xs">
+                            <div>
+                                <div class="font-bold text-white">Грошовий бонус (25 грн)</div>
+                                <div class="text-[10px] text-slate-400">Виплата на картку сина</div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="font-bold text-yellow-400">100 СР</span>
+                                <button onclick="buyReward('25 грн на картку', 100)" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold py-1 px-2.5 rounded text-[10px]">Купити</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex justify-between items-center text-xs">
+                            <div>
+                                <div class="font-bold text-white">Грошовий бонус (50 грн)</div>
+                                <div class="text-[10px] text-slate-400">Знижка за об'єм СР</div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="font-bold text-yellow-400">180 СР</span>
+                                <button onclick="buyReward('50 грн на картку', 180)" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold py-1 px-2.5 rounded text-[10px]">Купити</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex justify-between items-center text-xs">
+                            <div>
+                                <div class="font-bold text-white">Миттєве Пропущене Завдання</div>
+                                <div class="text-[10px] text-slate-400">Дозволяє закрити будь-який квест</div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="font-bold text-yellow-400">150 СР</span>
+                                <button onclick="buyReward('Пропуск квесту', 150, true)" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold py-1 px-2.5 rounded text-[10px]">Купити</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Achievements System Tracking -->
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
+                    <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase border-b border-slate-800 pb-1">🏆 Кібер-Досягнення (Ачівки)</h3>
+                    <div id="achievements-container" class="space-y-2 text-xs max-h-60 overflow-y-auto pr-1">
+                        <!-- Achievements -->
+                    </div>
+                </div>
+
+                <div class="pt-4 text-center">
+                    <button onclick="resetRoleSettings()" class="py-2 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 font-bold text-xs rounded-lg transition">⚙️ Скинути Налаштування Ролі</button>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Bottom Tabbed Navigation Area -->
+        <nav id="bottom-nav" class="bg-slate-950 border-t border-slate-800 flex justify-around p-2 pb-6 absolute bottom-0 left-0 right-0 z-45">
+            <!-- Navigation will render dynamically in JS -->
+        </nav>
+
+    </div>
+
+    <script>
+        // -----------------------------------------
+        // 1. DATA, PRESETS & STATE
+        // -----------------------------------------
+        const DEFAULT_STATE = {
+            role: null, // 'son' or 'mom'
+            cp: 0,
+            xp: 0,
+            level: 1,
+            pin: "1111",
+            lastLogin: Date.now(),
+            streak: 0,
+            globalGoal: "Стати справжнім кібер-господарем",
+            goalTarget: 0,
+            goalCurrent: 0,
+            goalActive: false,
+            weather: 'sunny', // sunny, rain, heat
+            momMood: 'happy', // happy, neutral, angry
+            bank: { deposit: 0, credit: 0 },
+            mining: { servers: 0, unclaimed: 0 },
+            inventory: { energy: 0, luck: 0 },
+            activeBuffs: { luckTimer: 0 }, // If active, next quest rewards are doubled
+            theme: 'cyan',
+
+            // Passive businesses
+            businesses: [
+                { id: 'b1', name: 'Кібер-Курятник', price: 500, incomePerHour: 10, owned: 0 },
+                { id: 'b2', name: 'Сонячні Панелі', price: 2000, incomePerHour: 55, owned: 0 },
+                { id: 'b3', name: 'Хмарний Сервер', price: 8000, incomePerHour: 350, owned: 0 }
+            ],
+
+            // Pets (100 fullness represents total power for synergy)
+            pets: {
+                'kitty': { name: 'Кітті 🐈', hunger: 50, tag: 'cat', type: 'cat' },
+                'pirate': { name: 'Пірат 🐕', hunger: 50, tag: 'dog', type: 'dog' },
+                'chickens': { name: 'Кури 🐓', hunger: 50, tag: 'farm', type: 'chickens' }
+            },
+
+            // Active list of code promocodes (Generated by Mom, redeemed by Son)
+            promos: {},
+
+            // Chat records
+            chatHistory: [],
+
+            // Quests state tracking
+            questsState: {},
+
+            // Complete list of 50 village tasks (25 Dailies + 25 Specials)
+            questsData: [
+                // Dailies (1-25)
+                { id: 'q1', title: 'Нагодувати Пірата', desc: 'Дати свіжу порцію їжі собаці', cp: 15, xp: 10, type: 'daily', tag: 'dog', loc: 'out' },
+                { id: 'q2', title: 'Нагодувати Кітті', desc: 'Налити молока або дати корм коту', cp: 15, xp: 10, type: 'daily', tag: 'cat', loc: 'in' },
+                { id: 'q3', title: 'Налити води тваринам', desc: 'Оновити миски з водою у Пірата та Кітті', cp: 10, xp: 5, type: 'daily', tag: 'cat_dog', loc: 'out' },
+                { id: 'q4', title: 'Вигуляти Пірата', desc: 'Прогулятися з собакою за межі подвір\'я', cp: 25, xp: 15, type: 'daily', tag: 'dog', loc: 'out' },
+                { id: 'q5', title: 'Погодувати курей', desc: 'Насипати свіжого зерна в годівниці', cp: 20, xp: 10, type: 'daily', tag: 'farm', loc: 'out' },
+                { id: 'q6', title: 'Зібрати яйця в курнику', desc: 'Акуратно витягти свіжі яйця з сідал', cp: 25, xp: 15, type: 'daily', tag: 'farm', loc: 'out' },
+                { id: 'q7', title: 'Полити помідори в теплиці', desc: 'Вечірній полив розсади теплою водою', cp: 35, xp: 20, type: 'daily', tag: 'farm', loc: 'out' },
+                { id: 'q8', title: 'Полити грядки на городі', desc: 'Забезпечити полив основних сільських грядок', cp: 40, xp: 25, type: 'daily', tag: 'farm', loc: 'out' },
+                { id: 'q9', title: 'Вирвати алейку бур\'яну', desc: 'Очистити одну довгу лінію грядки від трави', cp: 30, xp: 20, type: 'daily', tag: 'farm', loc: 'out' },
+                { id: 'q10', title: 'Наносити води з колодязя', desc: 'Принести 3 повних відра свіжої питної води', cp: 45, xp: 30, type: 'daily', tag: 'hard', loc: 'out' },
+                { id: 'q11', title: 'Принести дров для пічки', desc: 'Принести зручний оберемок дров у хату', cp: 35, xp: 20, type: 'daily', tag: 'hard', loc: 'out' },
+                { id: 'q12', title: 'Скласти дрова під навіс', desc: 'Упорядкувати складені дрова в дровітню', cp: 40, xp: 25, type: 'daily', tag: 'hard', loc: 'out' },
+                { id: 'q13', title: 'Помити посуд після сніданку', desc: 'Помити тарілки, ложки і чашки', cp: 20, xp: 10, type: 'daily', tag: 'home', loc: 'in' },
+                { id: 'q14', title: 'Помити посуд після обіду', desc: 'Очистити кухонну раковину вдень', cp: 20, xp: 10, type: 'daily', tag: 'home', loc: 'in' },
+                { id: 'q15', title: 'Помити посуд після вечері', desc: 'Допомогти мамі очистити все перед сном', cp: 25, xp: 15, type: 'daily', tag: 'home', loc: 'in' },
+                { id: 'q16', title: 'Винести сміття', desc: 'Забрати повний пакет і віднести в бак', cp: 15, xp: 5, type: 'daily', tag: 'home', loc: 'out' },
+                { id: 'q17', title: 'Замести подвір\'я', desc: 'Підмести бруківку та доріжки перед хатою', cp: 30, xp: 20, type: 'daily', tag: 'hard', loc: 'out' },
+                { id: 'q18', title: 'Зробити ранкову зарядку', desc: 'Виконати 10-хвилинну розминку для м\'язів', cp: 15, xp: 10, type: 'daily', tag: 'personal', loc: 'in' },
+                { id: 'q19', title: 'Вивчити 10 нових слів', desc: 'Вивчити та повторити англійські слова', cp: 30, xp: 20, type: 'daily', tag: 'personal', loc: 'in' },
+                { id: 'q20', title: 'Прочитати 10 сторінок книги', desc: 'Прочитати визначений обсяг будь-якої корисної книги', cp: 25, xp: 15, type: 'daily', tag: 'personal', loc: 'in' },
+                { id: 'q21', title: 'Допомогти почистити картоплю', desc: 'Допомогти мамі з очищенням овочів на обід', cp: 20, xp: 15, type: 'daily', tag: 'home', loc: 'in' },
+                { id: 'q22', title: 'Запустити пральну машину', desc: 'Скласти одяг, засипати порошок і запустити', cp: 15, xp: 10, type: 'daily', tag: 'home', loc: 'in' },
+                { id: 'q23', title: 'Розвісити випраний одяг', desc: 'Вивісити білизну сушитися на вулиці', cp: 20, xp: 10, type: 'daily', tag: 'home', loc: 'out' },
+                { id: 'q24', title: 'Почистити взуття', desc: 'Почистити та пополірувати брудні черевики', cp: 15, xp: 10, type: 'daily', tag: 'home', loc: 'in' },
+                { id: 'q25', title: 'Зробити вологе прибирання', desc: 'Протерти пил та помити підлогу в кімнаті', cp: 40, xp: 30, type: 'daily', tag: 'home', loc: 'in' },
+                
+                // Specials (26-50)
+                { id: 'q26', title: 'Вирвати бур\'ян у саду', desc: 'Повне глобальне прибирання дикої трави під яблунями', cp: 200, xp: 150, type: 'special', tag: 'farm', loc: 'out' },
+                { id: 'q27', title: 'Почистити весь курник', desc: 'Повна дезінфекція та заміна соломи для курей', cp: 120, xp: 100, type: 'special', tag: 'farm', loc: 'out' },
+                { id: 'q28', title: 'Зібрати колорадських жуків', desc: 'Зібрати шкідників з кущів картоплі на великому городі', cp: 150, xp: 120, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q29', title: 'Нарубати дров', desc: 'Робота сокирою з колодами під наглядом дорослих', cp: 150, xp: 100, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q30', title: 'Скосити траву на подвір\'ї', desc: 'Застосувати тример або газонокосарку на газоні', cp: 100, xp: 80, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q31', title: 'Допомогти законсервувати огірки', desc: 'Участь у підготовці банок і закрутці заготовок', cp: 80, xp: 60, type: 'special', tag: 'home', loc: 'in' },
+                { id: 'q32', title: 'Помити вікна в хаті', desc: 'Глибока очистка віконного скла у кімнатах', cp: 100, xp: 85, type: 'special', tag: 'home', loc: 'in' },
+                { id: 'q33', title: 'Перебрати мішок картоплі', desc: 'Перевірити запаси картоплі у погребі', cp: 120, xp: 90, type: 'special', tag: 'hard', loc: 'in' },
+                { id: 'q34', title: 'Зібрати яблука в саду', desc: 'Наповнити велике відро стиглими яблуками з гілок', cp: 45, xp: 35, type: 'special', tag: 'farm', loc: 'out' },
+                { id: 'q35', title: 'Зібрати відро вишень', desc: 'Акуратно нарвати відро ягід з дерева', cp: 50, xp: 40, type: 'special', tag: 'farm', loc: 'out' },
+                { id: 'q36', title: 'Полагодити паркан', desc: 'Забити цвяхи, підрівняти дошки у паркані', cp: 80, xp: 70, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q37', title: 'Почистити піч або камін', desc: 'Вигребти золу та підготувати топку до сезону', cp: 70, xp: 60, type: 'special', tag: 'hard', loc: 'in' },
+                { id: 'q38', title: 'Пофарбувати лавочку біля хати', desc: 'Нанести свіжий захисний шар фарби на лавку', cp: 90, xp: 80, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q39', title: 'Допомогти сусідам', desc: 'Виконати корисне прохання літніх сусідів', cp: 100, xp: 80, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q40', title: 'Допомогти зварити борщ', desc: 'Почистити буряк, нашаткувати капусту на кухні', cp: 60, xp: 50, type: 'special', tag: 'home', loc: 'in' },
+                { id: 'q41', title: 'Зліпити вареники з мамою', desc: 'Допомогти замісити тісто та ліпити вареники', cp: 70, xp: 60, type: 'special', tag: 'home', loc: 'in' },
+                { id: 'q42', title: 'Сходити в магазин у селі', desc: 'Принести хліб, молоко та інші продукти за списком', cp: 20, xp: 15, type: 'special', tag: 'home', loc: 'out' },
+                { id: 'q43', title: 'Перевірити фільтр для води', desc: 'Замінити або якісно очистити картридж фільтру', cp: 30, xp: 25, type: 'special', tag: 'home', loc: 'in' },
+                { id: 'q44', title: 'Помити велосипед або мопед', desc: 'Довести особистий двоколісний транспорт до блиску', cp: 40, xp: 35, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q45', title: 'Скласти старі речі на горищі', desc: 'Розсортувати старі коробки в порядку', cp: 80, xp: 70, type: 'special', tag: 'home', loc: 'in' },
+                { id: 'q46', title: 'Прибрати в гаражі чи сараї', desc: 'Підмести підлогу, розставити інструменти на полиці', cp: 110, xp: 90, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q47', title: 'Допомогти посадити розсаду', desc: 'Спільна посадка нових рослин на грядках', cp: 50, xp: 40, type: 'special', tag: 'farm', loc: 'out' },
+                { id: 'q48', title: 'Зібрати суниці чи малину', desc: 'Нарвати козубок корисних свіжих ягід у саду', cp: 40, xp: 30, type: 'special', tag: 'farm', loc: 'out' },
+                { id: 'q49', title: 'Заготовити сіно', desc: 'Згребти викошену суху траву в ошатну скирту', cp: 90, xp: 70, type: 'special', tag: 'hard', loc: 'out' },
+                { id: 'q50', title: 'Почистити криницю зовні', desc: 'Прибрати навколо колодязя, помити цеберко', cp: 50, xp: 40, type: 'special', tag: 'hard', loc: 'out' }
+            ],
+
+            // Achievements details
+            achievements: [
+                { id: 'a1', title: 'Кібер-Початок', desc: 'Виконати 1 квест', req: 1, progress: 0, done: false, icon: '👶' },
+                { id: 'a2', title: 'Досвідчений Роботяга', desc: 'Виконати 15 квестів', req: 15, progress: 0, done: false, icon: '👷' },
+                { id: 'a3', title: 'Легенда Села', desc: 'Виконати 50 квестів', req: 50, progress: 0, done: false, icon: '🎖️' },
+                { id: 'a4', title: 'Кібер-Капіталіст', desc: 'Назбирати 1000 СР на рахунку', req: 1000, progress: 0, done: false, icon: '💰' },
+                { id: 'a5', title: 'Власник Імперії', desc: 'Купити перший пасивний Бізнес', req: 1, progress: 0, done: false, icon: '🏭' },
+                { id: 'a6', title: 'Найкращий Друг', desc: 'Нагодувати тварин сумарно 10 разів', req: 10, progress: 0, done: false, icon: '🐾' },
+                { id: 'a7', title: 'Щасливчик', desc: 'Виграти приз у Кібер-Кейсі', req: 1, progress: 0, done: false, icon: '🍀' },
+                { id: 'a8', title: 'Фінансова Грамотність', desc: 'Покласти понад 500 СР на Депозит', req: 500, progress: 0, done: false, icon: '🏦' },
+                { id: 'a9', title: 'Кібер-Хакер', desc: 'Успішно зламати Мережу у міні-грі', req: 1, progress: 0, done: false, icon: '🌐' },
+                { id: 'a10', title: 'Слухняний Син', desc: 'Отримати 5 схвалених квестів від мами', req: 5, progress: 0, done: false, icon: '❤️' }
+            ]
+        };
+
+        const THEMES = {
+            cyan: { name: 'Кібер-Неон', accent: '#0ea5e9', glow: 'rgba(14,165,233,0.4)', bg: 'bg-slate-950', panel: 'bg-slate-900/60' },
+            emerald: { name: 'Матриця Зелений', accent: '#10b981', glow: 'rgba(16,185,129,0.4)', bg: 'bg-emerald-950', panel: 'bg-emerald-900/40' },
+            mars: { name: 'Марсіанський Оранж', accent: '#f97316', glow: 'rgba(249,115,22,0.4)', bg: 'bg-stone-950', panel: 'bg-stone-900/60' },
+            purple: { name: 'Космічний Пурпур', accent: '#a855f7', glow: 'rgba(168,85,247,0.4)', bg: 'bg-indigo-950', panel: 'bg-indigo-900/40' }
+        };
+
+        const RANKS = [
+            { level: 1, name: 'Snoop (Новачок)' },
+            { level: 3, name: 'Hustler (Роботяга)' },
+            { level: 5, name: 'Cyber-Робітник' },
+            { level: 8, name: 'Господар Двору' },
+            { level: 12, name: 'Neo (Обраний)' }
+        ];
+
+        let state = {};
+        let currentTab = 'quests';
+        let currentQuestFilter = 'daily';
+        let isMomUnlocked = false;
+        
+        // -----------------------------------------
+        // 2. INITIALIZATION & CORE RECOVERY
+        // -----------------------------------------
+        function initApp() {
+            const saved = localStorage.getItem('cybercore_save');
+            if (saved) {
+                state = { ...DEFAULT_STATE, ...JSON.parse(saved) };
+                
+                // Ensure array structures and maps are kept up-to-date
+                if (!state.businesses) state.businesses = DEFAULT_STATE.businesses;
+                if (!state.achievements) state.achievements = DEFAULT_STATE.achievements;
+                if (!state.questsData) state.questsData = DEFAULT_STATE.questsData;
+                if (!state.promos) state.promos = {};
+                if (!state.chatHistory) state.chatHistory = [];
+                if (!state.inventory) state.inventory = { energy: 0, luck: 0 };
+                if (!state.activeBuffs) state.activeBuffs = { luckTimer: 0 };
+            } else {
+                state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+                
+                // Bind initial default structures
+                state.questsData.forEach(q => {
+                    state.questsState[q.id] = { status: 'open' }; 
+                });
+            }
+
+            // Sync offline rewards & streaks
+            processOfflineProgress();
+            
+            // Apply onboarding check
+            if (!state.role) {
+                document.getElementById('onboarding-screen').classList.remove('hidden');
+                document.getElementById('onboarding-screen').classList.add('flex');
+            } else {
+                applyRoleUI();
+            }
+
+            applyTheme();
+            updateUI();
+            initP2P();
+
+            // Setup real-time intervals
+            setInterval(() => {
+                tickPassiveIncome();
+                updateWheelCooldownText();
+            }, 1000);
+        }
+
+        function saveState() {
+            localStorage.setItem('cybercore_save', JSON.stringify(state));
+            updateUI();
+        }
+
+        // Custom Modal UI logic instead of browser alert/confirm/prompts
+        function showCustomModal(title, desc, type = 'alert', callback = null) {
+            const overlay = document.getElementById('custom-modal-overlay');
+            const modalTitle = document.getElementById('modal-title');
+            const modalDesc = document.getElementById('modal-desc');
+            const input = document.getElementById('modal-input');
+            const btnCancel = document.getElementById('modal-btn-cancel');
+            
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            modalTitle.innerText = title;
+            modalDesc.innerText = desc;
+            
+            if (type === 'prompt') {
+                input.classList.remove('hidden');
+                input.value = '';
+                btnCancel.classList.remove('hidden');
+            } else if (type === 'confirm') {
+                input.classList.add('hidden');
+                btnCancel.classList.remove('hidden');
+            } else {
+                input.classList.add('hidden');
+                btnCancel.classList.add('hidden');
+            }
+            
+            modalCallback = callback;
+        }
+
+        function closeModal(approved = false) {
+            const overlay = document.getElementById('custom-modal-overlay');
+            const val = document.getElementById('modal-input').value;
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+            
+            if (modalCallback) {
+                if (approved) {
+                    modalCallback(val || true);
+                } else {
+                    modalCallback(null);
+                }
+            }
+            modalCallback = null;
+        }
+
+        document.getElementById('modal-btn-cancel').onclick = () => closeModal(false);
+        document.getElementById('modal-btn-ok').onclick = () => closeModal(true);
+
+        function cyberAlert(title, text) { showCustomModal(title, text, 'alert'); }
+        function cyberConfirm(title, text, callback) { showCustomModal(title, text, 'confirm', callback); }
+        function cyberPrompt(title, text, callback) { showCustomModal(title, text, 'prompt', callback); }
+
+        function playSound(type) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                if (type === 'coin') {
+                    osc.type = 'sine'; 
+                    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12); // A5
+                    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+                    osc.start(); osc.stop(ctx.currentTime + 0.25);
+                } else if (type === 'error') {
+                    osc.type = 'sawtooth'; 
+                    osc.frequency.setValueAtTime(120, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                    osc.start(); osc.stop(ctx.currentTime + 0.2);
+                } else if (type === 'click') {
+                    osc.type = 'square'; 
+                    osc.frequency.setValueAtTime(350, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+                    osc.start(); osc.stop(ctx.currentTime + 0.05);
+                }
+            } catch(e) {}
+        }
+
+        // -----------------------------------------
+        // 3. OFFLINE PROGRESS & DAILY CYCLE
+        // -----------------------------------------
+        function processOfflineProgress() {
+            let now = Date.now();
+            let diffMs = now - state.lastLogin;
+            let diffHours = diffMs / (1000 * 60 * 60);
+            let diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+            // Daily cycle triggers (streaks, pets, deposit rate, credits rate)
+            if (diffDays >= 1) {
+                // Deposit +5% accruals
+                if (state.bank.deposit > 0) {
+                    state.bank.deposit += Math.floor(state.bank.deposit * 0.05);
+                }
+                
+                // Credit interest rates accruals
+                if (state.bank.credit > 0) {
+                    let creditRate = state.momMood === 'angry' ? 0.05 : 0.10;
+                    state.bank.credit += Math.floor(state.bank.credit * creditRate);
+                }
+                
+                // Pets hunger depletion
+                state.pets.kitty.hunger = Math.max(0, state.pets.kitty.hunger - 30);
+                state.pets.pirate.hunger = Math.max(0, state.pets.pirate.hunger - 30);
+                state.pets.chickens.hunger = Math.max(0, state.pets.chickens.hunger - 30);
+
+                // Daily login streak updates
+                if (diffDays < 2) {
+                    state.streak++;
+                    let bonus = 20 + (state.streak * 5);
+                    state.cp += bonus;
+                    cyberAlert("Щоденна Нагорода!", `Твій стрік: ${state.streak} дн. Нараховано бонус +${bonus} CP!`);
+                } else {
+                    state.streak = 1;
+                    state.cp += 20;
+                    cyberAlert("Повернення!", "Стрік втрачено, але тримай 20 СР за повернення в систему.");
+                }
+
+                // Reset daily completed quests
+                state.questsData.forEach(q => {
+                    if (q.type === 'daily' && state.questsState[q.id] && state.questsState[q.id].status === 'done') {
+                        state.questsState[q.id].status = 'open';
+                    }
+                });
+            }
+
+            // Passive Business Income calculation
+            if (diffHours > 0) {
+                let hourly = 0;
+                state.businesses.forEach(b => {
+                    hourly += (b.owned * b.incomePerHour);
+                });
+                if (hourly > 0) {
+                    state.mining.unclaimed += (hourly * diffHours);
+                }
+            }
+
+            state.lastLogin = now;
+            saveState();
+        }
+
+        function tickPassiveIncome() {
+            let now = Date.now();
+            let diffMs = now - state.lastLogin;
+            let diffSecs = diffMs / 1000;
+            
+            if (diffSecs >= 1) {
+                let totalIncomePerSec = 0;
+                state.businesses.forEach(b => {
+                    totalIncomePerSec += (b.owned * b.incomePerHour) / 3600;
+                });
+                
+                state.mining.unclaimed += totalIncomePerSec;
+                state.lastLogin = now;
+                
+                // Real-time DOM updates
+                const uncEl = document.getElementById('unclaimed-income');
+                if (uncEl) uncEl.innerText = Math.floor(state.mining.unclaimed) + " CP";
+            }
+        }
+
+        // -----------------------------------------
+        // 4. UI RENDERING & THEMES
+        // -----------------------------------------
+        function applyTheme() {
+            const activeTheme = THEMES[state.theme || 'cyan'];
+            document.documentElement.style.setProperty('--accent', activeTheme.accent);
+            document.documentElement.style.setProperty('--accent-glow', activeTheme.glow);
+            
+            // Adjust the header and logos colors based on theme
+            const logoEl = document.getElementById('header-logo');
+            if (logoEl) {
+                logoEl.style.color = activeTheme.accent;
+                logoEl.style.textShadow = `0 0 10px ${activeTheme.glow}`;
+            }
+
+            // Style nav tab buttons active accents
+            const activeTabBtn = document.querySelector(`.nav-btn[data-tab="${currentTab}"]`);
+            if (activeTabBtn) {
+                activeTabBtn.style.color = activeTheme.accent;
+            }
+
+            // Update themes active pickers outline classes
+            Object.keys(THEMES).forEach(themeKey => {
+                const btn = document.getElementById(`theme-btn-${themeKey}`);
+                if (btn) {
+                    if (themeKey === state.theme) {
+                        btn.className = "py-1.5 text-[10px] font-bold rounded bg-sky-600 text-slate-950";
+                        btn.style.backgroundColor = activeTheme.accent;
+                        btn.style.boxShadow = `0 0 10px ${activeTheme.glow}`;
+                    } else {
+                        btn.className = "py-1.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400";
+                        btn.style.backgroundColor = '';
+                        btn.style.boxShadow = '';
+                    }
+                }
+            });
+        }
+
+        function changeTheme(themeKey) {
+            playSound('click');
+            state.theme = themeKey;
+            saveState();
+            applyTheme();
+        }
+
+        function showMomPinSetup() {
+            playSound('click');
+            document.getElementById('role-select-buttons').classList.add('hidden');
+            document.getElementById('mom-pin-setup-box').classList.remove('hidden');
+        }
+
+        function updateUI() {
+            if (!state.role) return;
+            
+            document.getElementById('cp-display').innerText = Math.floor(state.cp);
+            document.getElementById('level-display').innerText = state.level;
+            
+            let rank = RANKS.slice().reverse().find(r => state.level >= r.level) || RANKS[0];
+            document.getElementById('rank-display').innerText = rank.name;
+            document.getElementById('xp-current').innerText = state.xp;
+            document.getElementById('streak-display').innerText = `🔥 Стрік: ${state.streak} дн.`;
+            
+            let xpNeeded = state.level * 100;
+            document.getElementById('xp-needed').innerText = xpNeeded;
+            let percent = Math.min(100, (state.xp / xpNeeded) * 100);
+            document.getElementById('xp-bar').style.width = percent + '%';
+
+            // Displays Goal progress
+            document.getElementById('global-goal-display').innerText = state.globalGoal;
+            if (state.goalActive) {
+                document.getElementById('global-goal-progress-container').classList.remove('hidden');
+                document.getElementById('goal-current').innerText = Math.floor(state.goalCurrent);
+                document.getElementById('goal-target').innerText = Math.floor(state.goalTarget);
+                let goalPct = Math.min(100, (state.goalCurrent / state.goalTarget) * 100);
+                document.getElementById('goal-bar').style.width = goalPct + '%';
+                if (state.role === 'son') {
+                    document.getElementById('son-invest-box').classList.remove('hidden');
+                } else {
+                    document.getElementById('son-invest-box').classList.add('hidden');
+                }
+            } else {
+                document.getElementById('global-goal-progress-container').classList.add('hidden');
+            }
+            
+            // Mood and Weather Display setup
+            const wMap = { 'sunny': '☀️ Ясно', 'rain': '🌧️ Дощ', 'heat': '🔥 Спека' };
+            document.getElementById('weather-display').innerText = wMap[state.weather] || wMap['sunny'];
+
+            const moodMap = {
+                'happy': '😄 Щаслива (+15% CP)',
+                'neutral': '😐 Звичайна (0% CP)',
+                'angry': '😡 Сердита (-10% CP, Кредит -5%)'
+            };
+            if (document.getElementById('mom-mood-label')) {
+                document.getElementById('mom-mood-label').innerText = moodMap[state.momMood];
+            }
+
+            // Sync Bank display
+            document.getElementById('bank-deposit').innerText = state.bank.deposit + " CP";
+            document.getElementById('bank-credit').innerText = state.bank.credit + " CP";
+
+            // Sync Inventory Items
+            document.getElementById('inv-energy').innerText = state.inventory.energy || 0;
+            document.getElementById('inv-luck').innerText = state.inventory.luck || 0;
+
+            renderQuests();
+            renderPets();
+            renderBusiness();
+            renderAchievements();
+            renderChatHistory();
+            renderPromocodeList();
+            renderMomPendingQuests();
+        }
+
+        function switchTab(tabId) {
+            playSound('click');
+            
+            // Auto lock when navigating away from Mom Console to enforce constant PIN verification
+            if (state.role === 'mom' && tabId !== 'mom') {
+                isMomUnlocked = false;
+            }
+
+            currentTab = tabId;
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+
+            if (state.role === 'mom' && tabId === 'mom' && !isMomUnlocked) {
+                document.getElementById('mom-pin-screen').classList.remove('hidden');
+                document.getElementById('mom-dashboard').classList.add('hidden');
+                document.getElementById('mom-pin-input').value = '';
+            }
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.style.color = '#64748b'; // Tailwind Slate-500
+            });
+            applyTheme(); // Reinject custom theme color to the active tab button
+        }
+
+        function selectRole(role) {
+            state.role = role;
+            if (role === 'mom') {
+                let pinVal = document.getElementById('mom-setup-pin-input').value.trim();
+                if (pinVal.length !== 4 || isNaN(pinVal)) {
+                    playSound('error');
+                    cyberAlert("Помилка", "PIN-код повинен складатися з 4 цифр!");
+                    return;
+                }
+                state.pin = pinVal;
+            }
+            document.getElementById('onboarding-screen').classList.add('hidden');
+            document.getElementById('onboarding-screen').classList.remove('flex');
+            saveState();
+            applyRoleUI();
+            cyberAlert("Успішно", `Ви обрали роль: ${role === 'son' ? 'Син' : 'Мама'}`);
+        }
+
+        function applyRoleUI() {
+            const nav = document.getElementById('bottom-nav');
+            if (state.role === 'son') {
+                document.getElementById('mom-pin-screen').classList.remove('hidden');
+                document.getElementById('mom-dashboard').classList.add('hidden');
+                
+                nav.innerHTML = `
+                    <button onclick="switchTab('quests')" class="nav-btn text-sky-400 flex flex-col items-center p-2 w-16" data-tab="quests">
+                        <span class="text-xl">📋</span><span class="text-[9px] mt-0.5">Квести</span>
+                    </button>
+                    <button onclick="switchTab('economy')" class="nav-btn text-slate-500 flex flex-col items-center p-2 w-16" data-tab="economy">
+                        <span class="text-xl">💼</span><span class="text-[9px] mt-0.5">Економіка</span>
+                    </button>
+                    <button onclick="switchTab('pets')" class="nav-btn text-slate-500 flex flex-col items-center p-2 w-16" data-tab="pets">
+                        <span class="text-xl">🐾</span><span class="text-[9px] mt-0.5">Тварини</span>
+                    </button>
+                    <button onclick="switchTab('chat')" class="nav-btn text-slate-500 flex flex-col items-center p-2 w-16" data-tab="chat">
+                        <span class="text-xl">💬</span><span class="text-[9px] mt-0.5">Чат</span>
+                    </button>
+                    <button onclick="switchTab('profile')" class="nav-btn text-slate-500 flex flex-col items-center p-2 w-16" data-tab="profile">
+                        <span class="text-xl">👤</span><span class="text-[9px] mt-0.5">Профіль</span>
+                    </button>
+                `;
+                switchTab('quests');
+            } else {
+                isMomUnlocked = false;
+                document.getElementById('mom-pin-screen').classList.remove('hidden');
+                document.getElementById('mom-dashboard').classList.add('hidden');
+                
+                nav.innerHTML = `
+                    <button onclick="switchTab('mom')" class="nav-btn text-sky-400 flex flex-col items-center p-2 w-16" data-tab="mom">
+                        <span class="text-xl">👩‍👦</span><span class="text-[9px] mt-0.5">Мама</span>
+                    </button>
+                    <button onclick="switchTab('profile')" class="nav-btn text-slate-500 flex flex-col items-center p-2 w-16" data-tab="profile">
+                        <span class="text-xl">👤</span><span class="text-[9px] mt-0.5">Профіль</span>
+                    </button>
+                `;
+                switchTab('mom');
+            }
+        }
+
+        function resetRoleSettings() {
+            cyberConfirm("Скинути роль?", "Бажаєте вийти з поточного профілю та обрати роль знову?", (res) => {
+                if (res) {
+                    state.role = null;
+                    saveState();
+                    location.reload();
+                }
+            });
+        }
+
+        // -----------------------------------------
+        // 5. QUESTS & SYNERGIES SYSTEM
+        // -----------------------------------------
+        function filterQuests(type) {
+            playSound('click');
+            currentQuestFilter = type;
+            
+            const dailyBtn = document.getElementById('btn-filter-daily');
+            const specialBtn = document.getElementById('btn-filter-special');
+            const activeTheme = THEMES[state.theme || 'cyan'];
+
+            if (type === 'daily') {
+                dailyBtn.className = "flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-950";
+                dailyBtn.style.backgroundColor = activeTheme.accent;
+                dailyBtn.style.boxShadow = `0 0 10px ${activeTheme.glow}`;
+                
+                specialBtn.className = "flex-1 py-1.5 text-xs font-bold rounded-lg bg-slate-800 text-slate-400";
+                specialBtn.style.backgroundColor = '';
+                specialBtn.style.boxShadow = '';
+            } else {
+                specialBtn.className = "flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-950";
+                specialBtn.style.backgroundColor = activeTheme.accent;
+                specialBtn.style.boxShadow = `0 0 10px ${activeTheme.glow}`;
+
+                dailyBtn.className = "flex-1 py-1.5 text-xs font-bold rounded-lg bg-slate-800 text-slate-400";
+                dailyBtn.style.backgroundColor = '';
+                dailyBtn.style.boxShadow = '';
+            }
+
+            renderQuests();
+        }
+
+        function getQuestMultiplier(q) {
+            let mult = 1.0;
+            
+            // 1. Mom's Mood bonus
+            if (state.momMood === 'happy') mult += 0.15;
+            else if (state.momMood === 'angry') mult -= 0.10;
+
+            // 2. Weather conditions
+            if (state.weather === 'rain' && q.loc === 'in') mult += 0.5; // Inside gets +50% CP
+            if (state.weather === 'heat' && q.loc === 'out') mult += 0.5; // Outdoors gets +50% CP
+
+            // 3. Pets synergy (+20% CP bonus for tasks associated with them if pet is at 100% fullness)
+            if (q.tag === 'cat' && state.pets.kitty.hunger >= 100) mult += 0.20;
+            if (q.tag === 'dog' && state.pets.pirate.hunger >= 100) mult += 0.20;
+            if (q.tag === 'farm' && state.pets.chickens.hunger >= 100) mult += 0.20;
+
+            // 4. Double Luck Buff active
+            if (state.activeBuffs && state.activeBuffs.luckTimer > 0) {
+                mult += 1.0; // Adds additional 100% of base reward
+            }
+
+            return mult;
+        }
+
+        function renderQuests() {
+            const container = document.getElementById('quests-container');
+            container.innerHTML = '';
+            
+            // Filter both default pre-configured and custom mom created tasks
+            const filtered = state.questsData.filter(q => q.type === currentQuestFilter);
+            
+            // Dynamic text about current active synergies
+            const weatherEffectEl = document.getElementById('weather-effect');
+            if (state.weather === 'rain') {
+                weatherEffectEl.innerText = "🌦️ Погода: Дощ (Завдання в хаті отримують +50% CP)";
+            } else if (state.weather === 'heat') {
+                weatherEffectEl.innerText = "🌦️ Погода: Спека (Завдання на вулиці отримують +50% CP)";
+            } else {
+                weatherEffectEl.innerText = "🌦️ Погода: Ясно (Погода нейтральна)";
+            }
+
+            const petsBuffEl = document.getElementById('pets-buff');
+            let petBonusActive = (state.pets.kitty.hunger >= 100 || state.pets.pirate.hunger >= 100 || state.pets.chickens.hunger >= 100);
+            if (petBonusActive) {
+                petsBuffEl.innerText = "🐾 Тварини задоволені (100% ситість)! +20% CP на їх квести.";
+                petsBuffEl.className = "text-emerald-400 font-semibold";
+            } else {
+                petsBuffEl.innerText = "🐾 Деякі тварини голодні. Нагодуй їх, щоб активувати синергію +20%.";
+                petsBuffEl.className = "text-slate-400";
+            }
+
+            if (state.activeBuffs && state.activeBuffs.luckTimer > 0) {
+                petsBuffEl.innerText += " | 🍀 Активовано подвоєння CP від конюшини!";
+            }
+
+            filtered.forEach(q => {
+                let qState = state.questsState[q.id];
+                if (!qState) {
+                    state.questsState[q.id] = { status: 'open' };
+                    qState = state.questsState[q.id];
+                }
+                
+                // Hide special/one-time quests if they are fully verified as complete
+                if (q.type === 'special' && qState.status === 'done') return;
+
+                let mult = getQuestMultiplier(q);
+                let finalCp = Math.floor(q.cp * mult);
+                let finalXp = Math.floor(q.xp);
+
+                let btnHtml = '';
+                let borderClass = 'border-slate-800';
+
+                if (state.role === 'son') {
+                    if (qState.status === 'open') {
+                        btnHtml = `<button onclick="completeQuest('${q.id}')" class="bg-sky-600 hover:bg-sky-500 text-slate-950 text-xs px-3 py-1.5 rounded-lg font-bold">Виконав</button>`;
+                    } else if (qState.status === 'pending') {
+                        btnHtml = `<span class="text-xs text-yellow-400 font-semibold">На перевірці</span>`;
+                        borderClass = 'border-yellow-500/50 bg-yellow-950/20';
+                    } else if (qState.status === 'done') {
+                        btnHtml = `<span class="text-xs text-emerald-400 font-bold">✔ Виконано</span>`;
+                        borderClass = 'border-emerald-500/50 bg-emerald-950/20';
+                    }
+                } else {
+                    // Mom control view over individual quests
+                    if (qState.status === 'pending') {
+                        btnHtml = `
+                            <div class="flex space-x-1">
+                                <button onclick="momApproveQuest('${q.id}', true)" class="bg-emerald-500 text-slate-950 text-xs px-2 py-1 rounded font-bold">Так</button>
+                                <button onclick="momApproveQuest('${q.id}', false)" class="bg-rose-500 text-white text-xs px-2 py-1 rounded font-bold">Ні</button>
+                            </div>
+                        `;
+                        borderClass = 'border-fuchsia-500/50 bg-fuchsia-950/20';
+                    } else {
+                        btnHtml = `<span class="text-[10px] text-slate-500 uppercase">${qState.status === 'done' ? 'Завершено' : 'Відкрито'}</span>`;
+                    }
+                }
+
+                container.innerHTML += `
+                    <div class="bg-slate-950 p-3 rounded-xl border ${borderClass} flex justify-between items-center transition-all">
+                        <div class="space-y-0.5">
+                            <div class="font-bold text-white text-sm">${q.title}</div>
+                            <div class="text-[10px] text-slate-400">${q.desc}</div>
+                            <div class="text-xs font-semibold text-sky-400 font-mono pt-1">
+                                +${finalCp} СР | +${finalXp} XP ${mult > 1.0 ? '<span class="text-yellow-400 font-bold text-[9px] ml-1">(БОНУС)</span>' : ''}
+                            </div>
+                        </div>
+                        <div>${btnHtml}</div>
+                    </div>
+                `;
+            });
+        }
+
+        function completeQuest(id) {
+            playSound('click');
+            state.questsState[id].status = 'pending';
+            
+            // Check achievements triggers
+            trackAchievementProgress('a1', 1);
+            trackAchievementProgress('a2', 1);
+            trackAchievementProgress('a3', 1);
+
+            // Notify Mom via direct communication message
+            sendP2P({ type: 'quest_update' });
+            saveState();
+            cyberAlert("Відправлено", "Завдання успішно відправлено мамі на перевірку!");
+        }
+
+        function momApproveQuest(id, approved) {
+            let q = state.questsData.find(x => x.id === id);
+            if (!q) return;
+
+            if (approved) {
+                playSound('coin');
+                state.questsState[id].status = 'done';
+                
+                let mult = getQuestMultiplier(q);
+                let finalReward = Math.floor(q.cp * mult);
+                state.cp += finalReward;
+                
+                // Add XP
+                addXP(q.xp);
+
+                // Feeding associated pets if necessary
+                if (q.tag === 'cat' || q.tag === 'cat_dog') {
+                    state.pets.kitty.hunger = Math.min(100, state.pets.kitty.hunger + 40);
+                    trackAchievementProgress('a6', 1);
+                }
+                if (q.tag === 'dog' || q.tag === 'cat_dog') {
+                    state.pets.pirate.hunger = Math.min(100, state.pets.pirate.hunger + 40);
+                    trackAchievementProgress('a6', 1);
+                }
+                if (q.tag === 'farm') {
+                    state.pets.chickens.hunger = Math.min(100, state.pets.chickens.hunger + 40);
+                    trackAchievementProgress('a6', 1);
+                }
+
+                // Deactivate luck double CP buff if used
+                if (state.activeBuffs && state.activeBuffs.luckTimer > 0) {
+                    state.activeBuffs.luckTimer = 0;
+                }
+
+                trackAchievementProgress('a4', state.cp);
+                trackAchievementProgress('a10', 1);
+
+                cyberAlert("Схвалено!", `Завдання "${q.title}" схвалено. Нараховано +${finalReward} CP!`);
+            } else {
+                playSound('error');
+                state.questsState[id].status = 'open';
+                cyberAlert("Відхилено", `Завдання "${q.title}" відхилено.`);
+            }
+
+            saveState();
+            sendP2P({ type: 'state_update', payload: state });
+        }
+
+        function renderMomPendingQuests() {
+            const container = document.getElementById('mom-pending-quests-container');
+            if (!container) return;
+            container.innerHTML = '';
+            
+            let pendingCount = 0;
+            state.questsData.forEach(q => {
+                let qState = state.questsState[q.id];
+                if (qState && qState.status === 'pending') {
+                    pendingCount++;
+                    let mult = getQuestMultiplier(q);
+                    let finalCp = Math.floor(q.cp * mult);
+                    
+                    container.innerHTML += `
+                        <div class="bg-slate-900 p-2.5 rounded-lg border border-yellow-500/30 flex justify-between items-center text-xs">
+                            <div>
+                                <div class="font-bold text-white">${q.title}</div>
+                                <div class="text-[10px] text-yellow-400 font-semibold">+${finalCp} СР</div>
+                            </div>
+                            <div class="flex space-x-1">
+                                <button onclick="momApproveQuest('${q.id}', true)" class="bg-emerald-500 text-slate-950 text-[10px] px-2 py-1 rounded font-bold">Так</button>
+                                <button onclick="momApproveQuest('${q.id}', false)" class="bg-rose-500 text-white text-[10px] px-2 py-1 rounded font-bold">Ні</button>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            
+            if (pendingCount === 0) {
+                container.innerHTML = `<div class="text-[11px] text-slate-500 text-center py-2">Немає завдань на перевірку</div>`;
+            }
+        }
+
+        function addXP(amount) {
+            state.xp += amount;
+            let needed = state.level * 100;
+            if (state.xp >= needed) {
+                state.xp -= needed;
+                state.level++;
+                
+                trackAchievementProgress('a3', 0); // Re-evaluate level based achievements
+                cyberAlert("Рівень Підвищено! 🚀", `Ти досяг ${state.level} рівня!`);
+            }
+        }
+
+        // -----------------------------------------
+        // 6. ECONOMY, BANK, BIZ, LOOTBOXES & MINI-GAMES
+        // -----------------------------------------
+        function renderBusiness() {
+            const list = document.getElementById('business-list');
+            list.innerHTML = '';
+            
+            state.businesses.forEach(b => {
+                list.innerHTML += `
+                    <div class="bg-slate-900 p-3 rounded-lg border border-slate-800 flex justify-between items-center">
+                        <div>
+                            <div class="text-xs font-bold text-white">${b.name} <span class="text-sky-400 font-bold">(x${b.owned})</span></div>
+                            <div class="text-[9px] text-slate-400">+${b.incomePerHour} CP/год за 1 шт</div>
+                        </div>
+                        <button onclick="buyBusiness('${b.id}')" class="bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-400 font-bold text-xs px-3 py-1 rounded">Купити (${b.price} CP)</button>
+                    </div>
+                `;
+            });
+        }
+
+        function buyBusiness(id) {
+            let b = state.businesses.find(x => x.id === id);
+            if (state.cp >= b.price) {
+                state.cp -= b.price;
+                b.owned++;
+                playSound('coin');
+                
+                trackAchievementProgress('a5', 1);
+                cyberAlert("Вітаємо!", `Ви придбали ${b.name}! Пасивний дохід зріс.`);
+                saveState();
+            } else {
+                playSound('error');
+                cyberAlert("Помилка", `Потрібно ${b.price} CP.`);
+            }
+        }
+
+        function collectBusinessIncome() {
+            if (state.mining.unclaimed > 0) {
+                let collected = Math.floor(state.mining.unclaimed);
+                state.cp += collected;
+                state.mining.unclaimed = 0;
+                playSound('coin');
+                
+                trackAchievementProgress('a4', state.cp);
+                cyberAlert("Зібрано!", `Пасивний прибуток у розмірі +${collected} CP зараховано на ваш баланс.`);
+                saveState();
+            } else {
+                playSound('error');
+                cyberAlert("Порожньо", "Сейф вашого бізнесу порожній.");
+            }
+        }
+
+        function bankAction(type, action) {
+            cyberPrompt("Введіть суму", "Введіть кількість СР для операції:", (val) => {
+                let amount = parseInt(val);
+                if (isNaN(amount) || amount <= 0) return;
+
+                if (type === 'deposit') {
+                    if (action === 'add' && state.cp >= amount) {
+                        state.cp -= amount;
+                        state.bank.deposit += amount;
+                        trackAchievementProgress('a8', state.bank.deposit);
+                    } else if (action === 'take' && state.bank.deposit >= amount) {
+                        state.bank.deposit -= amount;
+                        state.cp += amount;
+                    } else {
+                        playSound('error');
+                        return cyberAlert("Помилка", "Немає потрібної суми на балансі/депозиті.");
+                    }
+                } else if (type === 'credit') {
+                    if (action === 'take') {
+                        // Max credit depends on son level
+                        let maxCredit = state.level * 250;
+                        if (state.bank.credit + amount > maxCredit) {
+                            playSound('error');
+                            return cyberAlert("Помилка", `Твій ліміт кредиту за поточним рівнем становить: ${maxCredit} CP.`);
+                        }
+                        state.bank.credit += amount;
+                        state.cp += amount;
+                    } else if (action === 'pay' && state.cp >= amount) {
+                        let toPay = Math.min(amount, state.bank.credit);
+                        state.cp -= toPay;
+                        state.bank.credit -= toPay;
+                    } else {
+                        playSound('error');
+                        return cyberAlert("Помилка", "Немає потрібної суми.");
+                    }
+                }
+                playSound('coin');
+                saveState();
+            });
+        }
+
+        // -----------------------------------------
+        // LOOTBOX & CS:GO CASING OPENING MECHANICS
+        // -----------------------------------------
+        let isSpinning = false;
+        function openCase() {
+            if (isSpinning) return;
+            if (state.cp < 150) {
+                playSound('error');
+                return cyberAlert("Помилка", "Недостатньо коштів! Вартість кібер-кейсу: 150 CP.");
+            }
+
+            state.cp -= 150;
+            saveState();
+
+            isSpinning = true;
+            document.getElementById('roulette-box').classList.remove('hidden');
+            document.getElementById('btn-open-case').disabled = true;
+            document.getElementById('btn-open-case').innerText = "Ініціалізація...";
+            playSound('click');
+
+            const track = document.getElementById('roulette-track');
+            track.style.transition = 'none';
+            track.style.transform = 'translateX(0)';
+            track.innerHTML = '';
+
+            const rewards = [
+                { name: 'Хлам', type: 'common', html: '🗑️<span>Хлам</span>', val: 'junk' },
+                { name: '10 CP', type: 'common', html: '🪙<span>10 CP</span>', val: 10 },
+                { name: '50 CP', type: 'rare', html: '💵<span>50 CP</span>', val: 50 },
+                { name: 'Енергетик', type: 'epic', html: '🥫<span>Енергія</span>', val: 'energy' },
+                { name: 'Конюшина', type: 'epic', html: '🍀<span>Удача</span>', val: 'luck' },
+                { name: 'ДЖЕКПОТ!', type: 'legendary', html: '💰<span>500 CP</span>', val: 500 }
+            ];
+
+            const winningIndex = 25; // Item selected to win
+            const rollItems = [];
+
+            for (let i = 0; i < 35; i++) {
+                let item;
+                let rnd = Math.random();
+                if (rnd < 0.04) item = rewards[5]; // Jackpot 4%
+                else if (rnd < 0.15) item = rewards[4];
+                else if (rnd < 0.30) item = rewards[3];
+                else if (rnd < 0.55) item = rewards[2];
+                else if (rnd < 0.80) item = rewards[1];
+                else item = rewards[0];
+
+                rollItems.push(item);
+
+                let div = document.createElement('div');
+                div.className = `roulette-item ${item.type === 'legendary' ? 'bg-amber-500/10 border-r border-amber-500/30' : ''}`;
+                div.innerHTML = item.html;
+                track.appendChild(div);
+            }
+
+            const winItem = rollItems[winningIndex];
+
+            setTimeout(() => {
+                // Approximate item width 81px
+                let shift = -(winningIndex * 81) + 160;
+                track.style.transition = 'transform 3.5s cubic-bezier(0.1, 0.8, 0.1, 1)';
+                track.style.transform = `translateX(${shift}px)`;
+            }, 50);
+
+            setTimeout(() => {
+                isSpinning = false;
+                document.getElementById('btn-open-case').disabled = false;
+                document.getElementById('btn-open-case').innerText = "Відкрити Кейс";
+                document.getElementById('roulette-box').classList.add('hidden');
+
+                // Reward application
+                if (typeof winItem.val === 'number') {
+                    state.cp += winItem.val;
+                    trackAchievementProgress('a4', state.cp);
+                } else if (winItem.val === 'energy') {
+                    state.inventory.energy = (state.inventory.energy || 0) + 1;
+                } else if (winItem.val === 'luck') {
+                    state.inventory.luck = (state.inventory.luck || 0) + 1;
+                }
+
+                trackAchievementProgress('a7', 1);
+
+                playSound(winItem.type === 'legendary' ? 'coin' : 'click');
+                cyberAlert("Вітаємо!", `Ви отримали: ${winItem.name}`);
+                saveState();
+            }, 3600);
+        }
+
+        // -----------------------------------------
+        // WHEEL OF DESTINY & BREACH CLICKER MECHANICS
+        // -----------------------------------------
+        let wheelActive = false;
+        let lastWheelSpin = 0; // Epoch timestamp
+
+        function spinWheel() {
+            let now = Date.now();
+            let savedCooldown = localStorage.getItem('cyber_wheel_cooldown') || 0;
+            if (now - savedCooldown < 12 * 60 * 60 * 1000) {
+                let remainSecs = Math.ceil(((12 * 60 * 60 * 1000) - (now - savedCooldown)) / 1000);
+                let hrs = Math.floor(remainSecs / 3600);
+                let mins = Math.floor((remainSecs % 3600) / 60);
+                return cyberAlert("Сектор заблоковано", `🎡 Колесо Фортуни перезаряджається. Буде доступно через: ${hrs} год. ${mins} хв.`);
+            }
+
+            playSound('click');
+            localStorage.setItem('cyber_wheel_cooldown', now);
+
+            let rewards = [
+                { text: "Нагороду +50 СР!", val: () => { state.cp += 50; } },
+                { text: "Банківський бонус +100 СР!", val: () => { state.cp += 100; } },
+                { text: "Кібер-Енергетик у інвентар!", val: () => { state.inventory.energy = (state.inventory.energy || 0) + 1; } },
+                { text: "Знахідка: Конюшина Удачі!", val: () => { state.inventory.luck = (state.inventory.luck || 0) + 1; } },
+                { text: "Зміна погоди на 'Ясно'!", val: () => { state.weather = 'sunny'; } },
+                { text: "Штраф від долі: -30 СР!", val: () => { state.cp = Math.max(0, state.cp - 30); } }
+            ];
+
+            let index = Math.floor(Math.random() * rewards.length);
+            let result = rewards[index];
+            result.val();
+            
+            saveState();
+            cyberAlert("Колесо Фортуни", `🎡 Результат обертання: ${result.text}`);
+        }
+
+        function updateWheelCooldownText() {
+            let now = Date.now();
+            let savedCooldown = localStorage.getItem('cyber_wheel_cooldown') || 0;
+            const timerEl = document.getElementById('wheel-timer');
+            if (now - savedCooldown < 12 * 60 * 60 * 1000) {
+                let remainSecs = Math.ceil(((12 * 60 * 60 * 1000) - (now - savedCooldown)) / 1000);
+                let hrs = Math.floor(remainSecs / 3600);
+                let mins = Math.floor((remainSecs % 3600) / 60);
+                let secs = remainSecs % 60;
+                timerEl.innerText = `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            } else {
+                timerEl.innerText = "Доступно!";
+            }
+        }
+
+        // Daily Network Breach Clicker mini game
+        let breachClicksCount = 0;
+        let breachActive = false;
+        let breachSeconds = 10;
+        let breachInterval = null;
+
+        function startBreach() {
+            let now = Date.now();
+            let lastBreach = localStorage.getItem('cyber_breach_cooldown') || 0;
+            if (now - lastBreach < 24 * 60 * 60 * 1000) {
+                return cyberAlert("Мережа закрита", "Злом Мережі доступний лише один раз на добу!");
+            }
+
+            playSound('click');
+            breachClicksCount = 0;
+            breachSeconds = 10;
+            breachActive = true;
+
+            document.getElementById('breach-container').classList.remove('hidden');
+            document.getElementById('breach-clicks').innerText = '0';
+            document.getElementById('breach-timer').innerText = '10';
+            moveBreachNode();
+
+            breachInterval = setInterval(() => {
+                breachSeconds--;
+                document.getElementById('breach-timer').innerText = breachSeconds;
+                
+                if (breachSeconds <= 0) {
+                    endBreachGame(false);
+                }
+            }, 1000);
+        }
+
+        function registerBreachClick() {
+            if (!breachActive) return;
+            playSound('click');
+            breachClicksCount++;
+            document.getElementById('breach-clicks').innerText = breachClicksCount;
+            moveBreachNode();
+
+            if (breachClicksCount >= 30) {
+                endBreachGame(true);
+            }
+        }
+
+        function moveBreachNode() {
+            const node = document.getElementById('breach-node');
+            let x = Math.floor(Math.random() * 70) + 10; // offset bounds
+            let y = Math.floor(Math.random() * 70) + 10;
+            node.style.left = x + '%';
+            node.style.top = y + '%';
+        }
+
+        function endBreachGame(success) {
+            clearInterval(breachInterval);
+            breachActive = false;
+            document.getElementById('breach-container').classList.add('hidden');
+            localStorage.setItem('cyber_breach_cooldown', Date.now());
+
+            if (success) {
+                playSound('coin');
+                state.cp += 40;
+                addXP(50);
+                trackAchievementProgress('a9', 1);
+                cyberAlert("Успішний злом!", "Система зламана! Нараховано +40 СР та +50 XP!");
+            } else {
+                playSound('error');
+                cyberAlert("Помилка злому", "Системний фаєрвол заблокував ваші пакети. Наступна спроба завтра!");
+            }
+            saveState();
+        }
+
+        // -----------------------------------------
+        // 7. INVENTORY ITEMS USE & SHOP REDEMPTION
+        // -----------------------------------------
+        function useItem(itemType) {
+            playSound('click');
+            if (itemType === 'energy') {
+                if ((state.inventory.energy || 0) > 0) {
+                    // Instantly complete 1 quest that is currently open/pending
+                    let openQuests = state.questsData.filter(q => {
+                        let qState = state.questsState[q.id];
+                        return qState && qState.status === 'open';
+                    });
+                    if (openQuests.length === 0) return cyberAlert("Помилка", "Немає відкритих квестів для миттєвого закриття.");
+                    
+                    let q = openQuests[0];
+                    state.inventory.energy--;
+                    state.questsState[q.id].status = 'done';
+                    let mult = getQuestMultiplier(q);
+                    let finalReward = Math.floor(q.cp * mult);
+                    state.cp += finalReward;
+                    addXP(q.xp);
+                    
+                    cyberAlert("Використано!", `Кібер-Енергетик допоміг миттєво закрити завдання: "${q.title}"! Нараховано +${finalReward} CP.`);
+                    saveState();
+                } else {
+                    cyberAlert("Порожньо", "У вас немає Кібер-Енергетиків.");
+                }
+            } else if (itemType === 'luck') {
+                if ((state.inventory.luck || 0) > 0) {
+                    if (state.activeBuffs.luckTimer > 0) return cyberAlert("Помилка", "Конюшина вже активована!");
+                    state.inventory.luck--;
+                    state.activeBuffs.luckTimer = 1; // 1 represents active for 1 next quest
+                    cyberAlert("Активовано!", "🍀 Чотирилиста конюшина збільшує нагороду CP за наступний завершений квест у 2 рази!");
+                    saveState();
+                } else {
+                    cyberAlert("Порожньо", "У вас немає Конюшин Удачі.");
+                }
+            }
+        }
+
+        function buyReward(title, cost, isSkipItem = false) {
+            playSound('click');
+            if (state.cp >= cost) {
+                state.cp -= cost;
+                
+                if (isSkipItem) {
+                    state.inventory.energy = (state.inventory.energy || 0) + 1;
+                    cyberAlert("Куплено!", "Кібер-Енергетик успішно завантажено у твій інвентар!");
+                } else {
+                    // Send to Mom via P2P if active or show simulated success screen
+                    sendP2P({ type: 'reward_purchase', payload: { title, cost } });
+                    cyberAlert("Успіх!", `Запит на купівлю "${title}" за ${cost} CP надіслано мамі. Покажіть їй екран для видачі винагороди!`);
+                }
+                saveState();
+            } else {
+                playSound('error');
+                cyberAlert("Помилка", "Недостатньо CP для здійснення купівлі.");
+            }
+        }
+
+        // -----------------------------------------
+        // 8. PETS TABS RENDERING
+        // -----------------------------------------
+        function renderPets() {
+            const container = document.getElementById('pets-container');
+            container.innerHTML = '';
+            
+            for (let key in state.pets) {
+                let p = state.pets[key];
+                let colorClass = p.hunger > 70 ? 'bg-emerald-500' : (p.hunger > 35 ? 'bg-yellow-500' : 'bg-rose-500');
+                
+                container.innerHTML += `
+                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 flex justify-between items-center space-x-3">
+                        <div class="flex-1 space-y-2">
+                            <div class="flex justify-between text-xs font-bold text-white">
+                                <span>${p.name}</span>
+                                <span>Ситість: <span class="text-sky-400 font-mono">${p.hunger}%</span></span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div class="${colorClass} h-full transition-all duration-300" style="width: ${p.hunger}%"></div>
+                            </div>
+                        </div>
+                        <button onclick="feedPet('${key}')" class="bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-400 font-bold text-xs px-2.5 py-1.5 rounded-lg">Годувати (10 СР)</button>
+                    </div>
+                `;
+            }
+        }
+
+        function feedPet(key) {
+            if (state.cp >= 10 && state.pets[key].hunger < 100) {
+                state.cp -= 10;
+                state.pets[key].hunger = Math.min(100, state.pets[key].hunger + 25);
+                playSound('coin');
+                trackAchievementProgress('a6', 1);
+                saveState();
+            } else if (state.pets[key].hunger >= 100) {
+                cyberAlert("Ситий!", "Вихованець повністю ситий.");
+            } else {
+                playSound('error');
+                cyberAlert("Помилка", "Недостатньо коштів! Вартість порції: 10 CP.");
+            }
+        }
+
+        // -----------------------------------------
+        // 9. ACHIEVEMENTS CONTROLLER
+        // -----------------------------------------
+        function trackAchievementProgress(id, amount) {
+            let a = state.achievements.find(x => x.id === id);
+            if (a && !a.done) {
+                if (id === 'a4' || id === 'a8') {
+                    // Absolute values tracking
+                    a.progress = Math.max(a.progress, amount);
+                } else {
+                    // Counter increment tracking
+                    a.progress += amount;
+                }
+                
+                if (a.progress >= a.req) {
+                    a.progress = a.req;
+                    a.done = true;
+                    cyberAlert("Досягнення Розблоковано! 🏆", `${a.icon} ${a.title}: ${a.desc}`);
+                }
+            }
+        }
+
+        function renderAchievements() {
+            const container = document.getElementById('achievements-container');
+            container.innerHTML = '';
+            
+            state.achievements.forEach(a => {
+                let textCol = a.done ? 'text-yellow-400 font-bold' : 'text-slate-500';
+                let checkMark = a.done ? '✓' : `${a.progress}/${a.req}`;
+                
+                container.innerHTML += `
+                    <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 flex justify-between items-center text-[11px]">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-base">${a.icon}</span>
+                            <div>
+                                <div class="${textCol}">${a.title}</div>
+                                <div class="text-[9px] text-slate-400">${a.desc}</div>
+                            </div>
+                        </div>
+                        <span class="font-mono ${a.done ? 'text-yellow-400' : 'text-slate-400'}">${checkMark}</span>
+                    </div>
+                `;
+            });
+        }
+
+        // -----------------------------------------
+        // 10. PEERJS DIRECT DEVICE-TO-DEVICE NETWORK
+        // -----------------------------------------
+        let peerInstance = null;
+        let peerConnInstance = null;
+
+        function initP2P() {
+            // Check if standard network WebSockets are allowed by sandbox environments
+            let isSocketBlocked = false;
+            try {
+                if (window.WebSocket) {
+                    let testSocket = new window.WebSocket("wss://0.peerjs.com");
+                    testSocket.close();
+                } else {
+                    isSocketBlocked = true;
+                }
+            } catch (e) {
+                isSocketBlocked = true;
+            }
+
+            if (isSocketBlocked) {
+                document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-yellow-500 shadow-[0_0_8px_#eab308]";
+                document.getElementById('status-led').title = "Офлайн-режим (Canvas)";
+                document.getElementById('conn-text').innerText = "Офлайн-режим (Canvas)";
+                document.getElementById('my-peer-id').innerText = "Canvas Sandbox";
+                return; // Gracefully fall back to local offline sync codes
+            }
+
+            try {
+                // Initialize PeerJS on random session ID
+                peerInstance = new Peer(null, { debug: 1 });
+                
+                peerInstance.on('open', (id) => {
+                    document.getElementById('my-peer-id').innerText = id;
+                    document.getElementById('conn-text').innerText = `Готовий до зв'язку (ID: ${id})`;
+                    document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]";
+                });
+
+                peerInstance.on('connection', (conn) => {
+                    setupPeerConnection(conn);
+                    cyberAlert("З'єднання", "З'єднання з пристроєм мами встановлено!");
+                });
+
+                peerInstance.on('error', (err) => {
+                    document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]";
+                });
+            } catch (e) {
+                document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-yellow-500";
+            }
+        }
+
+        function connectToPeer() {
+            if (!peerInstance) return cyberAlert("Помилка", "Мережа працює в автономному офлайн-режимі.");
+            const targetId = document.getElementById('connect-to-id').value;
+            if (!targetId) return;
+            const conn = peerInstance.connect(targetId);
+            setupPeerConnection(conn);
+        }
+
+        function setupPeerConnection(conn) {
+            peerConnInstance = conn;
+            conn.on('open', () => {
+                document.getElementById('conn-text').innerText = "З'єднано з партнером";
+                document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]";
+                if (state.role === 'mom') {
+                    sendP2P({ type: 'request_state' });
+                }
+            });
+            conn.on('data', (data) => {
+                handleNetworkData(data);
+            });
+        }
+
+        function sendP2P(data) {
+            if (peerConnInstance && peerConnInstance.open) {
+                peerConnInstance.send(data);
+            }
+        }
+
+        function handleNetworkData(data) {
+            if (data.type === 'chat') {
+                state.chatHistory.push(data.payload);
+                renderChatHistory();
+            } else if (data.type === 'state_update') {
+                state = data.payload;
+                saveState();
+            } else if (data.type === 'quest_update' && state.role === 'mom') {
+                playSound('coin');
+                cyberAlert("Увага!", "Син надіслав нове виконане завдання на перевірку!");
+            } else if (data.type === 'request_state' && state.role === 'son') {
+                sendP2P({ type: 'state_update', payload: state });
+            } else if (data.type === 'reward_purchase' && state.role === 'mom') {
+                cyberAlert("Покупка в Магазині!", `Син просить видати нагороду: "${data.payload.title}" (Вартість: ${data.payload.cost} CP)`);
+            }
+        }
+
+        // -----------------------------------------
+        // 11. MOM CONTROLS, OFF-BRIDGE SYNC & CODES
+        // -----------------------------------------
+        function checkMomPin() {
+            const entered = document.getElementById('mom-pin-input').value;
+            if (entered === state.pin) {
+                isMomUnlocked = true;
+                document.getElementById('mom-pin-screen').classList.add('hidden');
+                document.getElementById('mom-dashboard').classList.remove('hidden');
+                playSound('coin');
+            } else {
+                playSound('error');
+                cyberAlert("Відхилено", "Невірний PIN-код!");
+            }
+        }
+
+        function lockMom() {
+            isMomUnlocked = false;
+            document.getElementById('mom-pin-input').value = '';
+            document.getElementById('mom-pin-screen').classList.remove('hidden');
+            document.getElementById('mom-dashboard').classList.add('hidden');
+            switchTab('mom');
+        }
+
+        function momAction(type) {
+            if (type === 'reward') {
+                state.cp += 50;
+                trackAchievementProgress('a4', state.cp);
+                cyberAlert("Успіх", "Нараховано премію +50 СР!");
+            } else {
+                state.cp = Math.max(0, state.cp - 50);
+                cyberAlert("Стягнення", "Накладено штраф -50 СР!");
+            }
+            saveState();
+            sendP2P({ type: 'state_update', payload: state });
+        }
+
+        function setMomMood(mood) {
+            playSound('click');
+            state.momMood = mood;
+            
+            // Adjust credit rate visually
+            const depositBtn = document.getElementById('mood-btn-happy');
+            const neutralBtn = document.getElementById('mood-btn-neutral');
+            const angryBtn = document.getElementById('mood-btn-angry');
+
+            depositBtn.className = mood === 'happy' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
+            neutralBtn.className = mood === 'neutral' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
+            angryBtn.className = mood === 'angry' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
+
+            saveState();
+            sendP2P({ type: 'state_update', payload: state });
+        }
+
+        function setGlobalGoal() {
+            const name = document.getElementById('mom-goal-name').value;
+            const price = parseInt(document.getElementById('mom-goal-price').value);
+            
+            if (name && !isNaN(price) && price > 0) {
+                state.globalGoal = name;
+                state.goalTarget = price;
+                state.goalCurrent = 0;
+                state.goalActive = true;
+
+                document.getElementById('mom-goal-name').value = '';
+                document.getElementById('mom-goal-price').value = '';
+                cyberAlert("Оновлено", "Нову Глобальну Мега-Ціль активовано!");
+                saveState();
+                sendP2P({ type: 'state_update', payload: state });
+            }
+        }
+
+        function investInGoal() {
+            const amount = parseInt(document.getElementById('son-invest-amount').value);
+            if (!isNaN(amount) && amount > 0 && state.cp >= amount) {
+                state.cp -= amount;
+                state.goalCurrent += amount;
+                document.getElementById('son-invest-amount').value = '';
+                
+                if (state.goalCurrent >= state.goalTarget) {
+                    state.goalActive = false;
+                    cyberAlert("ЦІЛЬ ДОСЯГНУТА! 🎉", `Вітаємо, ви назбирали на "${state.globalGoal}"! Повідомте маму про завершення.`);
+                } else {
+                    cyberAlert("Внесок зроблено!", `Ви вклали +${amount} СР у вашу мрію.`);
+                }
+                saveState();
+                sendP2P({ type: 'state_update', payload: state });
+            } else {
+                playSound('error');
+                cyberAlert("Помилка", "Немає потрібної суми СР або некоректні дані.");
+            }
+        }
+
+        function setWeather(weatherKey) {
+            playSound('click');
+            state.weather = weatherKey;
+            
+            const sunnyBtn = document.getElementById('weather-btn-sunny');
+            const rainBtn = document.getElementById('weather-btn-rain');
+            const heatBtn = document.getElementById('weather-btn-heat');
+
+            sunnyBtn.className = weatherKey === 'sunny' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
+            rainBtn.className = weatherKey === 'rain' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
+            heatBtn.className = weatherKey === 'heat' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
+
+            saveState();
+            sendP2P({ type: 'state_update', payload: state });
+        }
+
+        // Promocodes mechanics (Mom creates, Son redeems)
+        function generatePromoCode() {
+            let code = document.getElementById('mom-promo-code').value.toUpperCase().trim();
+            let cpVal = parseInt(document.getElementById('mom-promo-cp').value);
+            
+            if (code && !isNaN(cpVal) && cpVal > 0) {
+                state.promos[code] = { reward: cpVal, active: true };
+                document.getElementById('mom-promo-code').value = '';
+                document.getElementById('mom-promo-cp').value = '';
+                cyberAlert("Успішно", `Промокод "${code}" на ${cpVal} CP активовано! Поділіться ним з сином.`);
+                saveState();
+                sendP2P({ type: 'state_update', payload: state });
+            }
+        }
+
+        function renderPromocodeList() {
+            const listEl = document.getElementById('active-promocodes');
+            if (listEl) {
+                let codes = Object.keys(state.promos).filter(k => state.promos[k].active);
+                if (codes.length > 0) {
+                    listEl.innerText = "Активні коди: " + codes.map(k => `${k} (+${state.promos[k].reward} СР)`).join(', ');
+                } else {
+                    listEl.innerText = "Активні коди: немає";
+                }
+            }
+        }
+
+        function redeemPromoCode() {
+            let code = document.getElementById('son-promo-input').value.toUpperCase().trim();
+            if (state.promos[code] && state.promos[code].active) {
+                playSound('coin');
+                let reward = state.promos[code].reward;
+                state.cp += reward;
+                state.promos[code].active = false;
+                document.getElementById('son-promo-input').value = '';
+                trackAchievementProgress('a4', state.cp);
+                cyberAlert("Успіх!", `Промокод активовано. Отримано +${reward} СР!`);
+                saveState();
+                sendP2P({ type: 'state_update', payload: state });
+            } else {
+                playSound('error');
+                cyberAlert("Помилка", "Промокод недійсний або вже використаний.");
+            }
+        }
+
+        // Custom template loader
+        function loadQuestTemplate() {
+            const select = document.getElementById('quest-template-select');
+            const nameInput = document.getElementById('new-task-name');
+            const cpInput = document.getElementById('new-task-cp');
+            const xpInput = document.getElementById('new-task-xp');
+            
+            const val = select.value;
+            if (val === 't1') {
+                nameInput.value = "Допомогти помити вікна";
+                cpInput.value = "100";
+                xpInput.value = "80";
+            } else if (val === 't2') {
+                nameInput.value = "Зібрати врожай на городі";
+                cpInput.value = "80";
+                xpInput.value = "60";
+            } else if (val === 't3') {
+                nameInput.value = "Вивчити уроки / правила";
+                cpInput.value = "40";
+                xpInput.value = "30";
+            } else if (val === 't4') {
+                nameInput.value = "Прибрати в коморі";
+                cpInput.value = "90";
+                xpInput.value = "70";
+            } else {
+                nameInput.value = '';
+                cpInput.value = '';
+                xpInput.value = '';
+            }
+        }
+
+        function createNewQuest() {
+            const name = document.getElementById('new-task-name').value;
+            const cp = parseInt(document.getElementById('new-task-cp').value);
+            const xp = parseInt(document.getElementById('new-task-xp').value);
+            const type = document.querySelector('input[name="new-task-type"]:checked').value;
+
+            if (name && !isNaN(cp) && cp > 0 && !isNaN(xp) && xp > 0) {
+                let id = 'cq_' + Date.now();
+                state.questsData.push({
+                    id: id,
+                    title: name,
+                    desc: "Спеціальне завдання від мами",
+                    cp: cp,
+                    xp: xp,
+                    type: type,
+                    tag: 'custom',
+                    loc: 'in'
+                });
+                state.questsState[id] = { status: 'open' };
+
+                document.getElementById('new-task-name').value = '';
+                document.getElementById('new-task-cp').value = '';
+                document.getElementById('new-task-xp').value = '';
+                
+                cyberAlert("Опубліковано!", `Нове завдання "${name}" успішно додано у квест-борд.`);
+                saveState();
+                sendP2P({ type: 'state_update', payload: state });
+            }
+        }
+
+        // Offline Fallback Synchronization Codes
+        function exportProgressCode() {
+            let str = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+            // Create a fake textarea to copy text securely in context
+            const el = document.createElement('textarea');
+            el.value = str;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+
+            playSound('click');
+            cyberAlert("Скопійовано!", "Код вашого прогресу скопійовано у буфер обміну. Надішліть його іншому пристрою через будь-який месенджер.");
+        }
+
+        function importProgressCode() {
+            cyberPrompt("Вставте Код", "Вставте код прогресу з іншого пристрою:", (val) => {
+                if (val) {
+                    try {
+                        let parsed = JSON.parse(decodeURIComponent(escape(atob(val))));
+                        if (parsed.questsData && parsed.cp !== undefined) {
+                            state = parsed;
+                            saveState();
+                            cyberAlert("Успіх", "Прогрес успішно синхронізовано та завантажено!");
+                        } else {
+                            throw new Error("Invalid structure");
+                        }
+                    } catch (e) {
+                        playSound('error');
+                        cyberAlert("Помилка", "Неправильний або пошкоджений код синхронізації.");
+                    }
+                }
+            });
+        }
+
+        // -----------------------------------------
+        // 12. P2P REAL-TIME CHAT
+        // -----------------------------------------
+        function sendQuickPhrase(text) {
+            if (state.role === 'son') {
+                document.getElementById('son-chat-input').value = text;
+                sendChatMessageSon();
+            } else {
+                document.getElementById('chat-input').value = text;
+                sendChatMessage();
+            }
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const txt = input.value.trim();
+            if (!txt) return;
+
+            let msg = {
+                sender: 'mom',
+                text: txt,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            state.chatHistory.push(msg);
+            input.value = '';
+            
+            // Broadcast via P2P
+            sendP2P({ type: 'chat', payload: msg });
+            saveState();
+            renderChatHistory();
+        }
+
+        function sendChatMessageSon() {
+            const input = document.getElementById('son-chat-input');
+            const txt = input.value.trim();
+            if (!txt) return;
+
+            let msg = {
+                sender: 'son',
+                text: txt,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            state.chatHistory.push(msg);
+            input.value = '';
+            
+            // Broadcast via P2P
+            sendP2P({ type: 'chat', payload: msg });
+            saveState();
+            renderChatHistory();
+        }
+
+        function renderChatHistory() {
+            const containerMom = document.getElementById('chat-messages');
+            const containerSon = document.getElementById('son-chat-messages');
+            
+            let chatHtml = '';
+            state.chatHistory.forEach(m => {
+                let isMe = m.sender === state.role;
+                let bg = isMe ? 'bg-sky-600/20 border-sky-500/30' : 'bg-slate-950 border-slate-800';
+                let float = isMe ? 'text-right' : 'text-left';
+                let senderName = m.sender === 'son' ? 'Син' : 'Мама';
+                let senderCol = m.sender === 'son' ? 'text-sky-400' : 'text-fuchsia-400';
+
+                chatHtml += `
+                    <div class="${float} space-y-0.5">
+                        <span class="text-[9px] font-bold ${senderCol}">${senderName}</span>
+                        <div class="inline-block p-2 rounded-lg border ${bg} text-left text-xs max-w-[80%]">
+                            <div>${m.text}</div>
+                            <div class="text-[8px] text-slate-500 text-right mt-1 font-mono">${m.time}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            if (containerMom) {
+                containerMom.innerHTML = chatHtml;
+                containerMom.scrollTop = containerMom.scrollHeight;
+            }
+            if (containerSon) {
+                containerSon.innerHTML = chatHtml;
+                containerSon.scrollTop = containerSon.scrollHeight;
+            }
+        }
+
+        // Bootstrap on startup
+        window.onload = initApp;
+
+    </script>
+</body>
+</html>
