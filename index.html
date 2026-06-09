@@ -79,16 +79,7 @@
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex justify-center items-start overflow-x-hidden">
-window.onload = function() {
-    const params = new URLSearchParams(window.location.search);
-    const syncData = params.get('sync');
-    if (syncData) {
-        const decoded = atob(syncData); // Розкодовуємо
-        localStorage.setItem('gameData', decoded); // Зберігаємо дані сина
-        alert("Дані успішно отримані!");
-        window.location.href = window.location.pathname; // Очищуємо посилання
-    }
-};
+
     <!-- Main Vertically Responsive Layout Wrapper -->
     <div class="w-full max-w-md min-h-screen flex flex-col bg-slate-900 border-x border-slate-800 relative mx-auto pb-24 shadow-2xl">
         
@@ -98,6 +89,8 @@ window.onload = function() {
                 <div class="flex items-center space-x-2">
                     <div id="status-led" class="w-3.5 h-3.5 rounded-full bg-yellow-500 shadow-[0_0_8px_#eab308]" title="Статус мережі"></div>
                     <h1 class="cyber-font text-lg font-bold uppercase tracking-wider text-sky-400" id="header-logo">Cyber<span class="text-white">Core</span></h1>
+                    <!-- Son's short code badge display -->
+                    <span id="son-code-badge" class="hidden text-[10px] bg-sky-950 text-sky-400 border border-sky-800 rounded px-1.5 py-0.5 ml-1.5 font-mono font-bold">Код: <span id="son-header-code">0000</span></span>
                 </div>
                 <div class="text-right">
                     <div class="text-[10px] text-slate-400 uppercase tracking-widest">Баланс СР</div>
@@ -340,10 +333,13 @@ window.onload = function() {
                     <!-- Direct Peer Connection and Sync Panel -->
                     <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2.5">
                         <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">📡 Мережевий Синхро-Хаб</h3>
-                        <div class="text-[10px] text-slate-400">Твій Peer ID (відправ сину): <span id="my-peer-id" class="font-mono text-white bg-slate-900 px-1 py-0.5 rounded ml-1 tracking-wider select-all">Створюється...</span></div>
-                        <div class="flex space-x-1.5">
-                            <input type="text" id="connect-to-id" placeholder="ID сина" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 text-xs text-white focus:outline-none">
-                            <button onclick="connectToPeer()" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg">З'єднати</button>
+                        <div class="text-[10px] text-slate-400">Твій статус: <span id="conn-text" class="text-yellow-400">Ініціалізація...</span></div>
+                        <div class="space-y-1.5 pt-1">
+                            <label class="text-[10px] text-slate-400 uppercase tracking-widest">Введіть 4-значний код Сина:</label>
+                            <div class="flex space-x-1.5">
+                                <input type="text" id="connect-to-id" placeholder="Наприклад: 5432" maxlength="4" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 text-xs text-center font-bold text-white focus:outline-none">
+                                <button onclick="connectToPeer()" class="bg-sky-600 hover:bg-sky-500 text-slate-950 font-bold text-xs px-4 py-1.5 rounded-lg">З'єднати</button>
+                            </div>
                         </div>
                         
                         <!-- Offline Sync Section (Fallback) -->
@@ -402,7 +398,7 @@ window.onload = function() {
 
                     <!-- Promocodes Generator -->
                     <div class="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-2">
-                        <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">🎫 Генератор Промокодів</h3>
+                        <h3 class="font-bold text-sky-400 text-xs tracking-wider uppercase">🎫 Generator Promocodes</h3>
                         <div class="flex space-x-1.5">
                             <input type="text" id="mom-promo-code" placeholder="Код (напр. SUPERSON)" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none uppercase">
                             <input type="number" id="mom-promo-cp" placeholder="СР" class="w-14 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center text-white focus:outline-none">
@@ -472,7 +468,7 @@ window.onload = function() {
                 <h2 class="cyber-font text-lg text-sky-400 tracking-wide uppercase border-b border-slate-800 pb-1">Профіль & Магазин</h2>
                 
                 <!-- Inventory & Items Module -->
-                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
+                <div id="profile-inventory-section" class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
                     <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase">🎒 Мій Кібер-Інвентар</h3>
                     <div class="grid grid-cols-2 gap-2">
                         <div class="bg-slate-900 p-2 rounded-lg border border-slate-800 flex justify-between items-center">
@@ -499,7 +495,7 @@ window.onload = function() {
                 </div>
 
                 <!-- Custom P2P Promo Code activation area inside profile tab -->
-                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
+                <div id="profile-promo-section" class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
                     <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase">🎫 Активувати Промокод</h3>
                     <div class="flex space-x-1.5">
                         <input type="text" id="son-promo-input" placeholder="Код від мами" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white uppercase focus:outline-none">
@@ -519,7 +515,7 @@ window.onload = function() {
                 </div>
 
                 <!-- CP Shop & Real payout items -->
-                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
+                <div id="profile-shop-section" class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
                     <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase border-b border-slate-800 pb-1">🛒 Магазин Нагород</h3>
                     
                     <div class="space-y-2">
@@ -570,7 +566,7 @@ window.onload = function() {
                 </div>
 
                 <!-- Achievements System Tracking -->
-                <div class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
+                <div id="profile-achievements-section" class="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3">
                     <h3 class="font-bold text-sky-400 text-sm tracking-wider uppercase border-b border-slate-800 pb-1">🏆 Кібер-Досягнення (Ачівки)</h3>
                     <div id="achievements-container" class="space-y-2 text-xs max-h-60 overflow-y-auto pr-1">
                         <!-- Achievements -->
@@ -601,6 +597,7 @@ window.onload = function() {
             xp: 0,
             level: 1,
             pin: "1111",
+            peerCode: null, // Short 4-digit code generated for Son P2P
             lastLogin: Date.now(),
             streak: 0,
             globalGoal: "Стати справжнім кібер-господарем",
@@ -692,7 +689,7 @@ window.onload = function() {
                 { id: 'q47', title: 'Допомогти посадити розсаду', desc: 'Спільна посадка нових рослин на грядках', cp: 50, xp: 40, type: 'special', tag: 'farm', loc: 'out' },
                 { id: 'q48', title: 'Зібрати суниці чи малину', desc: 'Нарвати козубок корисних свіжих ягід у саду', cp: 40, xp: 30, type: 'special', tag: 'farm', loc: 'out' },
                 { id: 'q49', title: 'Заготовити сіно', desc: 'Згребти викошену суху траву в ошатну скирту', cp: 90, xp: 70, type: 'special', tag: 'hard', loc: 'out' },
-                { id: 'q50', title: 'Почистити криницю зовні', desc: 'Прибрати навколо колодязя, помити цеберко', cp: 50, xp: 40, type: 'special', tag: 'hard', loc: 'out' }
+                { id: 'q50', title: 'Почистити криницю зовні', desc: 'Прибрать навколо колодязя, помити цеберко', cp: 50, xp: 40, type: 'special', tag: 'hard', loc: 'out' }
             ],
 
             // Achievements details
@@ -729,6 +726,7 @@ window.onload = function() {
         let currentTab = 'quests';
         let currentQuestFilter = 'daily';
         let isMomUnlocked = false;
+        let modalCallback = null;
         
         // -----------------------------------------
         // 2. INITIALIZATION & CORE RECOVERY
@@ -753,6 +751,11 @@ window.onload = function() {
                 state.questsData.forEach(q => {
                     state.questsState[q.id] = { status: 'open' }; 
                 });
+            }
+
+            // Generate short 4-digit code for P2P connection (if not already existing)
+            if (!state.peerCode) {
+                state.peerCode = Math.floor(1000 + Math.random() * 9000).toString();
             }
 
             // Sync offline rewards & streaks
@@ -1099,6 +1102,10 @@ window.onload = function() {
             document.getElementById('onboarding-screen').classList.remove('flex');
             saveState();
             applyRoleUI();
+            
+            // Reinitalize P2P to establish customized code/connection rules for new role
+            initP2P();
+            
             cyberAlert("Успішно", `Ви обрали роль: ${role === 'son' ? 'Син' : 'Мама'}`);
         }
 
@@ -1108,6 +1115,16 @@ window.onload = function() {
                 document.getElementById('mom-pin-screen').classList.remove('hidden');
                 document.getElementById('mom-dashboard').classList.add('hidden');
                 
+                // Show Son code in header
+                document.getElementById('son-code-badge').classList.remove('hidden');
+                document.getElementById('son-header-code').innerText = state.peerCode;
+
+                // Ensure Son Profile sections are fully visible
+                document.getElementById('profile-inventory-section')?.classList.remove('hidden');
+                document.getElementById('profile-promo-section')?.classList.remove('hidden');
+                document.getElementById('profile-shop-section')?.classList.remove('hidden');
+                document.getElementById('profile-achievements-section')?.classList.remove('hidden');
+
                 nav.innerHTML = `
                     <button onclick="switchTab('quests')" class="nav-btn text-sky-400 flex flex-col items-center p-2 w-16" data-tab="quests">
                         <span class="text-xl">📋</span><span class="text-[9px] mt-0.5">Квести</span>
@@ -1131,6 +1148,15 @@ window.onload = function() {
                 document.getElementById('mom-pin-screen').classList.remove('hidden');
                 document.getElementById('mom-dashboard').classList.add('hidden');
                 
+                // Hide Son code in header for Mom
+                document.getElementById('son-code-badge').classList.add('hidden');
+
+                // Hide Son-Only sections inside the Profile tab for Mom
+                document.getElementById('profile-inventory-section')?.classList.add('hidden');
+                document.getElementById('profile-promo-section')?.classList.add('hidden');
+                document.getElementById('profile-shop-section')?.classList.add('hidden');
+                document.getElementById('profile-achievements-section')?.classList.add('hidden');
+
                 nav.innerHTML = `
                     <button onclick="switchTab('mom')" class="nav-btn text-sky-400 flex flex-col items-center p-2 w-16" data-tab="mom">
                         <span class="text-xl">👩‍👦</span><span class="text-[9px] mt-0.5">Мама</span>
@@ -1147,6 +1173,7 @@ window.onload = function() {
             cyberConfirm("Скинути роль?", "Бажаєте вийти з поточного профілю та обрати роль знову?", (res) => {
                 if (res) {
                     state.role = null;
+                    state.peerCode = null; // Forces new short code generation
                     saveState();
                     location.reload();
                 }
@@ -1208,12 +1235,7 @@ window.onload = function() {
 
             return mult;
         }
-        function generateLink() {
-    const saveData = localStorage.getItem('gameData'); // Твої дані
-    const encoded = btoa(saveData); // Кодуємо в текст
-    const url = window.location.origin + window.location.pathname + '?sync=' + encoded;
-    prompt("Скопіюй це посилання і надішліть Мамі:", url);
-}
+
         function renderQuests() {
             const container = document.getElementById('quests-container');
             container.innerHTML = '';
@@ -1594,9 +1616,6 @@ window.onload = function() {
         // -----------------------------------------
         // WHEEL OF DESTINY & BREACH CLICKER MECHANICS
         // -----------------------------------------
-        let wheelActive = false;
-        let lastWheelSpin = 0; // Epoch timestamp
-
         function spinWheel() {
             let now = Date.now();
             let savedCooldown = localStorage.getItem('cyber_wheel_cooldown') || 0;
@@ -1614,7 +1633,7 @@ window.onload = function() {
                 { text: "Нагороду +50 СР!", val: () => { state.cp += 50; } },
                 { text: "Банківський бонус +100 СР!", val: () => { state.cp += 100; } },
                 { text: "Кібер-Енергетик у інвентар!", val: () => { state.inventory.energy = (state.inventory.energy || 0) + 1; } },
-                { text: "Знахідка: Конюшина Удачі!", val: () => { state.inventory.luck = (state.inventory.luck || 0) + 1; } },
+                { text: "Знахідка: @конюшина Удачі!", val: () => { state.inventory.luck = (state.inventory.luck || 0) + 1; } },
                 { text: "Зміна погоди на 'Ясно'!", val: () => { state.weather = 'sunny'; } },
                 { text: "Штраф від долі: -30 СР!", val: () => { state.cp = Math.max(0, state.cp - 30); } }
             ];
@@ -1869,6 +1888,8 @@ window.onload = function() {
         let peerConnInstance = null;
 
         function initP2P() {
+            if (!state.role) return;
+
             // Check if standard network WebSockets are allowed by sandbox environments
             let isSocketBlocked = false;
             try {
@@ -1885,24 +1906,36 @@ window.onload = function() {
             if (isSocketBlocked) {
                 document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-yellow-500 shadow-[0_0_8px_#eab308]";
                 document.getElementById('status-led').title = "Офлайн-режим (Canvas)";
-                document.getElementById('conn-text').innerText = "Офлайн-режим (Canvas)";
-                document.getElementById('my-peer-id').innerText = "Canvas Sandbox";
+                const connTxt = document.getElementById('conn-text');
+                if (connTxt) connTxt.innerText = "Офлайн-режим (Canvas)";
                 return; // Gracefully fall back to local offline sync codes
             }
 
             try {
-                // Initialize PeerJS on random session ID
-                peerInstance = new Peer(null, { debug: 1 });
+                // If peer already exists, destroy it before making a new one to avoid ID conflicts
+                if (peerInstance) {
+                    peerInstance.destroy();
+                }
+
+                // Custom ID mapping rules based on Role:
+                // Son: cyber-son-XXXX (where XXXX is his 4-digit code)
+                // Mom: random peer ID (since she connects, she doesn't need a static predictable ID)
+                let myCustomId = null;
+                if (state.role === 'son') {
+                    myCustomId = 'cyber-son-' + state.peerCode;
+                }
+
+                peerInstance = new Peer(myCustomId, { debug: 1 });
                 
                 peerInstance.on('open', (id) => {
-                    document.getElementById('my-peer-id').innerText = id;
-                    document.getElementById('conn-text').innerText = `Готовий до зв'язку (ID: ${id})`;
+                    const connTxt = document.getElementById('conn-text');
+                    if (connTxt) connTxt.innerText = "Готовий до зв'язку";
                     document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]";
                 });
 
                 peerInstance.on('connection', (conn) => {
                     setupPeerConnection(conn);
-                    cyberAlert("З'єднання", "З'єднання з пристроєм мами встановлено!");
+                    cyberAlert("З'єднання", "З'єднання з пристроєм встановлено!");
                 });
 
                 peerInstance.on('error', (err) => {
@@ -1915,8 +1948,14 @@ window.onload = function() {
 
         function connectToPeer() {
             if (!peerInstance) return cyberAlert("Помилка", "Мережа працює в автономному офлайн-режимі.");
-            const targetId = document.getElementById('connect-to-id').value;
-            if (!targetId) return;
+            const code = document.getElementById('connect-to-id').value.trim();
+            
+            if (code.length !== 4 || isNaN(code)) {
+                playSound('error');
+                return cyberAlert("Помилка", "Введіть правильний 4-значний код сина!");
+            }
+
+            const targetId = 'cyber-son-' + code;
             const conn = peerInstance.connect(targetId);
             setupPeerConnection(conn);
         }
@@ -1924,7 +1963,8 @@ window.onload = function() {
         function setupPeerConnection(conn) {
             peerConnInstance = conn;
             conn.on('open', () => {
-                document.getElementById('conn-text').innerText = "З'єднано з партнером";
+                const connTxt = document.getElementById('conn-text');
+                if (connTxt) connTxt.innerText = "З'єднано";
                 document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]";
                 if (state.role === 'mom') {
                     sendP2P({ type: 'request_state' });
@@ -1946,7 +1986,12 @@ window.onload = function() {
                 state.chatHistory.push(data.payload);
                 renderChatHistory();
             } else if (data.type === 'state_update') {
+                // Ensure Son's local custom code is not overwritten by Mom's state payload
+                const oldCode = state.peerCode;
+                const oldRole = state.role;
                 state = data.payload;
+                state.peerCode = oldCode;
+                state.role = oldRole;
                 saveState();
             } else if (data.type === 'quest_update' && state.role === 'mom') {
                 playSound('coin');
@@ -1968,6 +2013,7 @@ window.onload = function() {
                 document.getElementById('mom-pin-screen').classList.add('hidden');
                 document.getElementById('mom-dashboard').classList.remove('hidden');
                 playSound('coin');
+                updateUI();
             } else {
                 playSound('error');
                 cyberAlert("Відхилено", "Невірний PIN-код!");
