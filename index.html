@@ -10,6 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
     <style>
         :root {
             --accent: #0ea5e9;
@@ -93,7 +94,7 @@
                     <span id="son-code-badge" class="hidden text-[10px] bg-sky-950 text-sky-400 border border-sky-800 rounded px-1.5 py-0.5 ml-1.5 font-mono font-bold">Код: <span id="son-header-code">0000</span></span>
                 </div>
                 <div class="text-right">
-                    <div class="text-[10px] text-slate-400 uppercase tracking-widest">Баланс СР</div>
+                    <div id="balance-header-label" class="text-[10px] text-slate-400 uppercase tracking-widest">Баланс СР</div>
                     <div class="cyber-font text-xl font-black text-yellow-400 flex items-center justify-end">
                         <span id="cp-display">0</span> <span class="text-xs ml-1 text-yellow-500">CP</span>
                     </div>
@@ -103,7 +104,7 @@
             <!-- XP & Level Progress Bar -->
             <div class="space-y-1">
                 <div class="flex justify-between text-xs font-semibold text-slate-400">
-                    <span class="cyber-font">Рівень <span id="level-display" class="text-sky-400">1</span> [<span id="rank-display">Snoop</span>]</span>
+                    <span class="cyber-font" id="level-header-label">Рівень <span id="level-display" class="text-sky-400">1</span> [<span id="rank-display">Snoop</span>]</span>
                     <span><span id="xp-current">0</span> / <span id="xp-needed">100</span> XP</span>
                 </div>
                 <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
@@ -783,6 +784,10 @@
         function saveState() {
             localStorage.setItem('cybercore_save', JSON.stringify(state));
             updateUI();
+            // Unified State Sync: Only Son (the single source of truth Master) broadcasts state changes on saveState to prevent feedback loops.
+            if (peerConnInstance && peerConnInstance.open && state.role === 'son') {
+                sendP2P({ type: 'state_update', payload: state });
+            }
         }
 
         // Custom Modal UI logic instead of browser alert/confirm/prompts
@@ -1003,6 +1008,19 @@
         function updateUI() {
             if (!state.role) return;
             
+            // Adjust header context based on Mom's perspective
+            const balanceLabel = document.getElementById('balance-header-label');
+            if (balanceLabel) {
+                balanceLabel.innerText = state.role === 'mom' ? "Баланс Сина" : "Баланс СР";
+            }
+            const levelHeader = document.getElementById('level-header-label');
+            if (levelHeader) {
+                let rank = RANKS.slice().reverse().find(r => state.level >= r.level) || RANKS[0];
+                levelHeader.innerHTML = state.role === 'mom'
+                    ? `Син: Рівень <span id="level-display" class="text-sky-400">${state.level}</span> [<span id="rank-display">${rank.name}</span>]`
+                    : `Рівень <span id="level-display" class="text-sky-400">${state.level}</span> [<span id="rank-display">${rank.name}</span>]`;
+            }
+
             document.getElementById('cp-display').innerText = Math.floor(state.cp);
             document.getElementById('level-display').innerText = state.level;
             
@@ -1061,6 +1079,8 @@
             renderChatHistory();
             renderPromocodeList();
             renderMomPendingQuests();
+            updateMoodButtonsUI(state.momMood);
+            updateWeatherButtonsUI(state.weather);
         }
 
         function switchTab(tabId) {
@@ -1333,58 +1353,20 @@
             trackAchievementProgress('a2', 1);
             trackAchievementProgress('a3', 1);
 
-            // Notify Mom via direct communication message
-            sendP2P({ type: 'quest_update' });
-            saveState();
+            saveState(); // Saves locally and syncs to Mom if connected
+
+            if (peerConnInstance && peerConnInstance.open) {
+                // Broadcast notify event so Mom gets alert
+                sendP2P({ type: 'notify_quest_pending', title: state.questsData.find(x => x.id === id).title });
+            }
             cyberAlert("Відправлено", "Завдання успішно відправлено мамі на перевірку!");
         }
 
         function momApproveQuest(id, approved) {
-            let q = state.questsData.find(x => x.id === id);
-            if (!q) return;
-
-            if (approved) {
-                playSound('coin');
-                state.questsState[id].status = 'done';
-                
-                let mult = getQuestMultiplier(q);
-                let finalReward = Math.floor(q.cp * mult);
-                state.cp += finalReward;
-                
-                // Add XP
-                addXP(q.xp);
-
-                // Feeding associated pets if necessary
-                if (q.tag === 'cat' || q.tag === 'cat_dog') {
-                    state.pets.kitty.hunger = Math.min(100, state.pets.kitty.hunger + 40);
-                    trackAchievementProgress('a6', 1);
-                }
-                if (q.tag === 'dog' || q.tag === 'cat_dog') {
-                    state.pets.pirate.hunger = Math.min(100, state.pets.pirate.hunger + 40);
-                    trackAchievementProgress('a6', 1);
-                }
-                if (q.tag === 'farm') {
-                    state.pets.chickens.hunger = Math.min(100, state.pets.chickens.hunger + 40);
-                    trackAchievementProgress('a6', 1);
-                }
-
-                // Deactivate luck double CP buff if used
-                if (state.activeBuffs && state.activeBuffs.luckTimer > 0) {
-                    state.activeBuffs.luckTimer = 0;
-                }
-
-                trackAchievementProgress('a4', state.cp);
-                trackAchievementProgress('a10', 1);
-
-                cyberAlert("Схвалено!", `Завдання "${q.title}" схвалено. Нараховано +${finalReward} CP!`);
-            } else {
-                playSound('error');
-                state.questsState[id].status = 'open';
-                cyberAlert("Відхилено", `Завдання "${q.title}" відхилено.`);
+            runMomAction('approve_quest', { id: id, approved: approved });
+            if (!(peerConnInstance && peerConnInstance.open)) {
+                cyberAlert(approved ? "Схвалено!" : "Відхилено", "Зміни внесено локально.");
             }
-
-            saveState();
-            sendP2P({ type: 'state_update', payload: state });
         }
 
         function renderMomPendingQuests() {
@@ -1905,9 +1887,9 @@
 
             if (isSocketBlocked) {
                 document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-yellow-500 shadow-[0_0_8px_#eab308]";
-                document.getElementById('status-led').title = "Офлайн-режим (Canvas)";
+                document.getElementById('status-led').title = "Офлайн-режим (Обмеження)";
                 const connTxt = document.getElementById('conn-text');
-                if (connTxt) connTxt.innerText = "Офлайн-режим (Canvas)";
+                if (connTxt) connTxt.innerText = "Офлайн-режим (Обмеження)";
                 return; // Gracefully fall back to local offline sync codes
             }
 
@@ -1940,6 +1922,8 @@
 
                 peerInstance.on('error', (err) => {
                     document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]";
+                    const connTxt = document.getElementById('conn-text');
+                    if (connTxt) connTxt.innerText = "Помилка мережі";
                 });
             } catch (e) {
                 document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-yellow-500";
@@ -1982,20 +1966,24 @@
         }
 
         function handleNetworkData(data) {
-            if (data.type === 'chat') {
-                state.chatHistory.push(data.payload);
-                renderChatHistory();
-            } else if (data.type === 'state_update') {
-                // Ensure Son's local custom code is not overwritten by Mom's state payload
-                const oldCode = state.peerCode;
-                const oldRole = state.role;
-                state = data.payload;
-                state.peerCode = oldCode;
-                state.role = oldRole;
+            if (data.type === 'mom_action') {
+                // Son (Master) receives transaction from Mom, runs it, saves, and broadcasts state back.
+                applyMomActionLocally(data.action, data.payload);
                 saveState();
-            } else if (data.type === 'quest_update' && state.role === 'mom') {
+            } else if (data.type === 'chat_message_req') {
+                state.chatHistory.push(data.payload);
+                saveState();
+            } else if (data.type === 'state_update') {
+                // Son sends his master state. Mom receives and overwrites, preserving local configs.
+                const oldRole = state.role;
+                const oldPin = state.pin;
+                state = data.payload;
+                state.role = oldRole;
+                state.pin = oldPin;
+                saveState();
+            } else if (data.type === 'notify_quest_pending' && state.role === 'mom') {
                 playSound('coin');
-                cyberAlert("Увага!", "Син надіслав нове виконане завдання на перевірку!");
+                cyberAlert("Увага!", `Син надіслав нове виконане завдання на перевірку: "${data.title}"`);
             } else if (data.type === 'request_state' && state.role === 'son') {
                 sendP2P({ type: 'state_update', payload: state });
             } else if (data.type === 'reward_purchase' && state.role === 'mom') {
@@ -2003,9 +1991,102 @@
             }
         }
 
+        function applyMomActionLocally(actionType, payload) {
+            if (actionType === 'approve_quest') {
+                let q = state.questsData.find(x => x.id === payload.id);
+                if (!q) return;
+
+                if (payload.approved) {
+                    state.questsState[payload.id].status = 'done';
+                    let mult = getQuestMultiplier(q);
+                    let finalReward = Math.floor(q.cp * mult);
+                    state.cp += finalReward;
+                    addXP(q.xp);
+                    
+                    if (q.tag === 'cat' || q.tag === 'cat_dog') {
+                        state.pets.kitty.hunger = Math.min(100, state.pets.kitty.hunger + 40);
+                        trackAchievementProgress('a6', 1);
+                    }
+                    if (q.tag === 'dog' || q.tag === 'cat_dog') {
+                        state.pets.pirate.hunger = Math.min(100, state.pets.pirate.hunger + 40);
+                        trackAchievementProgress('a6', 1);
+                    }
+                    if (q.tag === 'farm') {
+                        state.pets.chickens.hunger = Math.min(100, state.pets.chickens.hunger + 40);
+                        trackAchievementProgress('a6', 1);
+                    }
+
+                    if (state.activeBuffs && state.activeBuffs.luckTimer > 0) {
+                        state.activeBuffs.luckTimer = 0;
+                    }
+
+                    trackAchievementProgress('a4', state.cp);
+                    trackAchievementProgress('a10', 1);
+
+                    if (state.role === 'son') {
+                        playSound('coin');
+                        cyberAlert("Схвалено!", `Завдання "${q.title}" схвалено мамою. Нараховано +${finalReward} CP!`);
+                    }
+                } else {
+                    state.questsState[payload.id].status = 'open';
+                    if (state.role === 'son') {
+                        playSound('error');
+                        cyberAlert("Відхилено", `Завдання "${q.title}" відхилено.`);
+                    }
+                }
+            }
+            else if (actionType === 'adjust_cp') {
+                state.cp = Math.max(0, state.cp + payload.amount);
+                if (payload.amount > 0) {
+                    trackAchievementProgress('a4', state.cp);
+                }
+                if (state.role === 'son') {
+                    if (payload.amount > 0) {
+                        playSound('coin');
+                        cyberAlert("Премія!", `Мама нарахувала тобі премію +${payload.amount} CP!`);
+                    } else {
+                        playSound('error');
+                        cyberAlert("Штраф!", `Мама виписала тобі штраф ${payload.amount} CP!`);
+                    }
+                }
+            }
+            else if (actionType === 'set_mood') {
+                state.momMood = payload.mood;
+            }
+            else if (actionType === 'set_weather') {
+                state.weather = payload.weather;
+            }
+            else if (actionType === 'set_goal') {
+                state.globalGoal = payload.name;
+                state.goalTarget = payload.price;
+                state.goalCurrent = 0;
+                state.goalActive = true;
+            }
+            else if (actionType === 'create_promo') {
+                state.promos[payload.code] = { reward: payload.cp, active: true };
+            }
+            else if (actionType === 'create_quest') {
+                state.questsData.push(payload.quest);
+                state.questsState[payload.quest.id] = { status: 'open' };
+            }
+            else if (actionType === 'send_chat') {
+                state.chatHistory.push(payload.msg);
+            }
+        }
+
         // -----------------------------------------
         // 11. MOM CONTROLS, OFF-BRIDGE SYNC & CODES
         // -----------------------------------------
+        function runMomAction(actionType, payload) {
+            if (peerConnInstance && peerConnInstance.open) {
+                sendP2P({ type: 'mom_action', action: actionType, payload: payload });
+            } else {
+                // Offline fallback: apply directly to local state
+                applyMomActionLocally(actionType, payload);
+                saveState();
+            }
+        }
+
         function checkMomPin() {
             const entered = document.getElementById('mom-pin-input').value;
             if (entered === state.pin) {
@@ -2029,50 +2110,39 @@
         }
 
         function momAction(type) {
-            if (type === 'reward') {
-                state.cp += 50;
-                trackAchievementProgress('a4', state.cp);
-                cyberAlert("Успіх", "Нараховано премію +50 СР!");
-            } else {
-                state.cp = Math.max(0, state.cp - 50);
-                cyberAlert("Стягнення", "Накладено штраф -50 СР!");
+            let amount = type === 'reward' ? 50 : -50;
+            runMomAction('adjust_cp', { amount: amount });
+            if (!(peerConnInstance && peerConnInstance.open)) {
+                cyberAlert(type === 'reward' ? "Премія!" : "Штраф!", "Зміни внесено локально.");
             }
-            saveState();
-            sendP2P({ type: 'state_update', payload: state });
         }
 
         function setMomMood(mood) {
             playSound('click');
-            state.momMood = mood;
-            
-            // Adjust credit rate visually
+            runMomAction('set_mood', { mood: mood });
+            updateMoodButtonsUI(mood);
+        }
+
+        function updateMoodButtonsUI(mood) {
             const depositBtn = document.getElementById('mood-btn-happy');
             const neutralBtn = document.getElementById('mood-btn-neutral');
             const angryBtn = document.getElementById('mood-btn-angry');
-
-            depositBtn.className = mood === 'happy' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
-            neutralBtn.className = mood === 'neutral' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
-            angryBtn.className = mood === 'angry' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
-
-            saveState();
-            sendP2P({ type: 'state_update', payload: state });
+            if (depositBtn && neutralBtn && angryBtn) {
+                depositBtn.className = mood === 'happy' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
+                neutralBtn.className = mood === 'neutral' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
+                angryBtn.className = mood === 'angry' ? "flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded" : "flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded";
+            }
         }
 
         function setGlobalGoal() {
-            const name = document.getElementById('mom-goal-name').value;
+            const name = document.getElementById('mom-goal-name').value.trim();
             const price = parseInt(document.getElementById('mom-goal-price').value);
             
             if (name && !isNaN(price) && price > 0) {
-                state.globalGoal = name;
-                state.goalTarget = price;
-                state.goalCurrent = 0;
-                state.goalActive = true;
-
+                runMomAction('set_goal', { name: name, price: price });
                 document.getElementById('mom-goal-name').value = '';
                 document.getElementById('mom-goal-price').value = '';
                 cyberAlert("Оновлено", "Нову Глобальну Мега-Ціль активовано!");
-                saveState();
-                sendP2P({ type: 'state_update', payload: state });
             }
         }
 
@@ -2090,7 +2160,6 @@
                     cyberAlert("Внесок зроблено!", `Ви вклали +${amount} СР у вашу мрію.`);
                 }
                 saveState();
-                sendP2P({ type: 'state_update', payload: state });
             } else {
                 playSound('error');
                 cyberAlert("Помилка", "Немає потрібної суми СР або некоректні дані.");
@@ -2099,32 +2168,30 @@
 
         function setWeather(weatherKey) {
             playSound('click');
-            state.weather = weatherKey;
-            
+            runMomAction('set_weather', { weather: weatherKey });
+            updateWeatherButtonsUI(weatherKey);
+        }
+
+        function updateWeatherButtonsUI(weatherKey) {
             const sunnyBtn = document.getElementById('weather-btn-sunny');
             const rainBtn = document.getElementById('weather-btn-rain');
             const heatBtn = document.getElementById('weather-btn-heat');
-
-            sunnyBtn.className = weatherKey === 'sunny' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
-            rainBtn.className = weatherKey === 'rain' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
-            heatBtn.className = weatherKey === 'heat' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
-
-            saveState();
-            sendP2P({ type: 'state_update', payload: state });
+            if (sunnyBtn && rainBtn && heatBtn) {
+                sunnyBtn.className = weatherKey === 'sunny' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
+                rainBtn.className = weatherKey === 'rain' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
+                heatBtn.className = weatherKey === 'heat' ? "flex-1 py-1.5 bg-sky-600 text-slate-950 font-bold text-xs rounded-lg" : "flex-1 py-1.5 bg-slate-850 text-slate-400 font-bold text-xs rounded-lg";
+            }
         }
 
-        // Promocodes mechanics (Mom creates, Son redeems)
         function generatePromoCode() {
             let code = document.getElementById('mom-promo-code').value.toUpperCase().trim();
             let cpVal = parseInt(document.getElementById('mom-promo-cp').value);
             
             if (code && !isNaN(cpVal) && cpVal > 0) {
-                state.promos[code] = { reward: cpVal, active: true };
+                runMomAction('create_promo', { code: code, cp: cpVal });
                 document.getElementById('mom-promo-code').value = '';
                 document.getElementById('mom-promo-cp').value = '';
-                cyberAlert("Успішно", `Промокод "${code}" на ${cpVal} CP активовано! Поділіться ним з сином.`);
-                saveState();
-                sendP2P({ type: 'state_update', payload: state });
+                cyberAlert("Успішно", `Промокод "${code}" на ${cpVal} CP активовано!`);
             }
         }
 
@@ -2151,7 +2218,6 @@
                 trackAchievementProgress('a4', state.cp);
                 cyberAlert("Успіх!", `Промокод активовано. Отримано +${reward} СР!`);
                 saveState();
-                sendP2P({ type: 'state_update', payload: state });
             } else {
                 playSound('error');
                 cyberAlert("Помилка", "Промокод недійсний або вже використаний.");
@@ -2190,14 +2256,14 @@
         }
 
         function createNewQuest() {
-            const name = document.getElementById('new-task-name').value;
+            const name = document.getElementById('new-task-name').value.trim();
             const cp = parseInt(document.getElementById('new-task-cp').value);
             const xp = parseInt(document.getElementById('new-task-xp').value);
             const type = document.querySelector('input[name="new-task-type"]:checked').value;
 
             if (name && !isNaN(cp) && cp > 0 && !isNaN(xp) && xp > 0) {
                 let id = 'cq_' + Date.now();
-                state.questsData.push({
+                let quest = {
                     id: id,
                     title: name,
                     desc: "Спеціальне завдання від мами",
@@ -2206,16 +2272,15 @@
                     type: type,
                     tag: 'custom',
                     loc: 'in'
-                });
-                state.questsState[id] = { status: 'open' };
+                };
+
+                runMomAction('create_quest', { quest: quest });
 
                 document.getElementById('new-task-name').value = '';
                 document.getElementById('new-task-cp').value = '';
                 document.getElementById('new-task-xp').value = '';
                 
                 cyberAlert("Опубліковано!", `Нове завдання "${name}" успішно додано у квест-борд.`);
-                saveState();
-                sendP2P({ type: 'state_update', payload: state });
             }
         }
 
@@ -2278,13 +2343,15 @@
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
 
-            state.chatHistory.push(msg);
             input.value = '';
             
-            // Broadcast via P2P
-            sendP2P({ type: 'chat', payload: msg });
-            saveState();
-            renderChatHistory();
+            if (peerConnInstance && peerConnInstance.open) {
+                // Mom sends chat event to Son's Master state
+                sendP2P({ type: 'chat_message_req', payload: msg });
+            } else {
+                state.chatHistory.push(msg);
+                saveState();
+            }
         }
 
         function sendChatMessageSon() {
@@ -2298,13 +2365,9 @@
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
 
-            state.chatHistory.push(msg);
             input.value = '';
-            
-            // Broadcast via P2P
-            sendP2P({ type: 'chat', payload: msg });
-            saveState();
-            renderChatHistory();
+            state.chatHistory.push(msg);
+            saveState(); // Son saves and broadcasts updated state to Mom automatically
         }
 
         function renderChatHistory() {
