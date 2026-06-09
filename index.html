@@ -366,7 +366,7 @@
                         <!-- Mood Slider -->
                         <div class="space-y-1 bg-slate-900 p-2 rounded-lg border border-slate-800">
                             <div class="text-[10px] text-slate-400 flex justify-between">
-                                <span>Настрій Матері:</span>
+                                <span>Настрій Нашої Мами:</span>
                                 <span id="mom-mood-label" class="font-bold text-sky-400">😄 Щаслива (+15% CP)</span>
                             </div>
                             <div class="flex space-x-1.5 pt-1">
@@ -735,18 +735,13 @@
         function initApp() {
             const saved = localStorage.getItem('cybercore_save');
             if (saved) {
-                state = { ...DEFAULT_STATE, ...JSON.parse(saved) };
-                
-                // Ensure array structures and maps are kept up-to-date
-                if (!state.businesses) state.businesses = DEFAULT_STATE.businesses;
-                if (!state.achievements) state.achievements = DEFAULT_STATE.achievements;
-                if (!state.questsData) state.questsData = DEFAULT_STATE.questsData;
-                if (!state.promos) state.promos = {};
-                if (!state.chatHistory) state.chatHistory = [];
-                if (!state.inventory) state.inventory = { energy: 0, luck: 0 };
-                if (!state.activeBuffs) state.activeBuffs = { luckTimer: 0 };
+                // Merge in-place to preserve primary object reference!
+                const parsed = JSON.parse(saved);
+                for (let key in state) delete state[key];
+                Object.assign(state, JSON.parse(JSON.stringify(DEFAULT_STATE)), parsed);
             } else {
-                state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+                for (let key in state) delete state[key];
+                Object.assign(state, JSON.parse(JSON.stringify(DEFAULT_STATE)));
                 
                 // Bind initial default structures
                 state.questsData.forEach(q => {
@@ -1974,16 +1969,27 @@
                 state.chatHistory.push(data.payload);
                 saveState();
             } else if (data.type === 'state_update') {
-                // Son sends his master state. Mom receives and overwrites, preserving local configs.
+                // Son sends his master state. Mom receives and overwrites, preserving local configs in-place.
                 const oldRole = state.role;
                 const oldPin = state.pin;
-                state = data.payload;
+                const oldPeerCode = state.peerCode;
+                
+                // Clear state keys while keeping the reference intact!
+                for (let key in state) {
+                    delete state[key];
+                }
+                Object.assign(state, data.payload);
+                
                 state.role = oldRole;
                 state.pin = oldPin;
+                state.peerCode = oldPeerCode;
+                
                 saveState();
             } else if (data.type === 'notify_quest_pending' && state.role === 'mom') {
                 playSound('coin');
                 cyberAlert("Увага!", `Син надіслав нове виконане завдання на перевірку: "${data.title}"`);
+                // Forces UI update of pending list directly on message receipt
+                renderMomPendingQuests();
             } else if (data.type === 'request_state' && state.role === 'son') {
                 sendP2P({ type: 'state_update', payload: state });
             } else if (data.type === 'reward_purchase' && state.role === 'mom') {
@@ -2305,7 +2311,9 @@
                     try {
                         let parsed = JSON.parse(decodeURIComponent(escape(atob(val))));
                         if (parsed.questsData && parsed.cp !== undefined) {
-                            state = parsed;
+                            // Mutation in place to preserve reference
+                            for (let key in state) delete state[key];
+                            Object.assign(state, parsed);
                             saveState();
                             cyberAlert("Успіх", "Прогрес успішно синхронізовано та завантажено!");
                         } else {
