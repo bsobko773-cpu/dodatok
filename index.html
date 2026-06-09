@@ -371,8 +371,8 @@
                             </div>
                             <div class="flex space-x-1.5 pt-1">
                                 <button onclick="setMomMood('happy')" id="mood-btn-happy" class="flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded">Щаслива</button>
-                                <button onclick="setMomMood('neutral')" id="mood-btn-neutral" class="flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded">Звичайна</button>
-                                <button onclick="setMomMood('angry')" id="mood-btn-angry" class="flex-1 py-1 bg-slate-800 text-slate-400 text-[10px] font-bold rounded">Сердита</button>
+                                <button onclick="setMomMood('neutral')" id="mood-btn-neutral" class="flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded">Звичайна</button>
+                                <button onclick="setMomMood('angry')" id="mood-btn-angry" class="flex-1 py-1 bg-sky-500 text-slate-950 text-[10px] font-bold rounded">Сердита</button>
                             </div>
                         </div>
 
@@ -427,8 +427,8 @@
                         <input type="text" id="new-task-name" placeholder="Назва завдання" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none">
                         
                         <div class="grid grid-cols-2 gap-2">
-                            <input type="number" id="new-task-cp" placeholder="СР" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:outline-none">
-                            <input type="number" id="new-task-xp" placeholder="XP" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:outline-none">
+                            <input type="number" id="new-task-cp" placeholder="СР" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-center text-white focus:outline-none">
+                            <input type="number" id="new-task-xp" placeholder="XP" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-center text-white focus:outline-none">
                         </div>
 
                         <div class="grid grid-cols-2 gap-2 text-xs">
@@ -733,15 +733,39 @@
         // 2. INITIALIZATION & CORE RECOVERY
         // -----------------------------------------
         function initApp() {
-            const saved = localStorage.getItem('cybercore_save');
+            // Isolating tab sessions for multi-tab testing on the same browser origin
+            let activeRole = sessionStorage.getItem('cybercore_active_role');
+            
+            // Auto fallback mapping for single-tab/different-device players
+            if (!activeRole) {
+                const savedSon = localStorage.getItem('cybercore_save_son');
+                const savedMom = localStorage.getItem('cybercore_save_mom');
+                if (savedSon && !savedMom) {
+                    activeRole = 'son';
+                    sessionStorage.setItem('cybercore_active_role', 'son');
+                } else if (savedMom && !savedSon) {
+                    activeRole = 'mom';
+                    sessionStorage.setItem('cybercore_active_role', 'mom');
+                }
+            }
+
+            const storageKey = activeRole ? 'cybercore_save_' + activeRole : 'cybercore_save';
+            const saved = localStorage.getItem(storageKey);
+
             if (saved) {
                 // Merge in-place to preserve primary object reference!
                 const parsed = JSON.parse(saved);
                 for (let key in state) delete state[key];
                 Object.assign(state, JSON.parse(JSON.stringify(DEFAULT_STATE)), parsed);
+                if (activeRole) {
+                    state.role = activeRole;
+                }
             } else {
                 for (let key in state) delete state[key];
                 Object.assign(state, JSON.parse(JSON.stringify(DEFAULT_STATE)));
+                if (activeRole) {
+                    state.role = activeRole;
+                }
                 
                 // Bind initial default structures
                 state.questsData.forEach(q => {
@@ -777,8 +801,11 @@
         }
 
         function saveState() {
-            localStorage.setItem('cybercore_save', JSON.stringify(state));
+            const activeRole = state.role || sessionStorage.getItem('cybercore_active_role') || 'son';
+            const storageKey = 'cybercore_save_' + activeRole;
+            localStorage.setItem(storageKey, JSON.stringify(state));
             updateUI();
+            
             // Unified State Sync: Only Son (the single source of truth Master) broadcasts state changes on saveState to prevent feedback loops.
             if (peerConnInstance && peerConnInstance.open && state.role === 'son') {
                 sendP2P({ type: 'state_update', payload: state });
@@ -1104,6 +1131,8 @@
 
         function selectRole(role) {
             state.role = role;
+            sessionStorage.setItem('cybercore_active_role', role);
+            
             if (role === 'mom') {
                 let pinVal = document.getElementById('mom-setup-pin-input').value.trim();
                 if (pinVal.length !== 4 || isNaN(pinVal)) {
@@ -1187,6 +1216,11 @@
         function resetRoleSettings() {
             cyberConfirm("Скинути роль?", "Бажаєте вийти з поточного профілю та обрати роль знову?", (res) => {
                 if (res) {
+                    const activeRole = state.role || sessionStorage.getItem('cybercore_active_role');
+                    if (activeRole) {
+                        localStorage.removeItem('cybercore_save_' + activeRole);
+                    }
+                    sessionStorage.removeItem('cybercore_active_role');
                     state.role = null;
                     state.peerCode = null; // Forces new short code generation
                     saveState();
@@ -2340,6 +2374,7 @@
             }
         }
 
+        // Mom sends chat message through Son's server/master state
         function sendChatMessage() {
             const input = document.getElementById('chat-input');
             const txt = input.value.trim();
