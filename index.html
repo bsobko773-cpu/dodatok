@@ -728,6 +728,16 @@
         let currentQuestFilter = 'daily';
         let isMomUnlocked = false;
         let modalCallback = null;
+
+        // -----------------------------------------
+        // LOCAL MULTI-TAB SYNCHRONIZATION
+        // -----------------------------------------
+        const localChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('cybercore_local_p2p') : null;
+        if (localChannel) {
+            localChannel.onmessage = (event) => {
+                handleNetworkData(event.data);
+            };
+        }
         
         // -----------------------------------------
         // 2. INITIALIZATION & CORE RECOVERY
@@ -753,7 +763,6 @@
             const saved = localStorage.getItem(storageKey);
 
             if (saved) {
-                // Merge in-place to preserve primary object reference!
                 const parsed = JSON.parse(saved);
                 for (let key in state) delete state[key];
                 Object.assign(state, JSON.parse(JSON.stringify(DEFAULT_STATE)), parsed);
@@ -766,12 +775,15 @@
                 if (activeRole) {
                     state.role = activeRole;
                 }
-                
-                // Bind initial default structures
-                state.questsData.forEach(q => {
-                    state.questsState[q.id] = { status: 'open' }; 
-                });
             }
+
+            // Guarantee every single quest has its tracking state properly initialized
+            if (!state.questsState) state.questsState = {};
+            state.questsData.forEach(q => {
+                if (!state.questsState[q.id]) {
+                    state.questsState[q.id] = { status: 'open' }; 
+                }
+            });
 
             // Generate short 4-digit code for P2P connection (if not already existing)
             if (!state.peerCode) {
@@ -793,6 +805,11 @@
             updateUI();
             initP2P();
 
+            // Request state from other tab to instantly sync if Mom starts
+            if (state.role === 'mom') {
+                sendData({ type: 'request_state' });
+            }
+
             // Setup real-time intervals
             setInterval(() => {
                 tickPassiveIncome();
@@ -806,9 +823,9 @@
             localStorage.setItem(storageKey, JSON.stringify(state));
             updateUI();
             
-            // Unified State Sync: Only Son (the single source of truth Master) broadcasts state changes on saveState to prevent feedback loops.
-            if (peerConnInstance && peerConnInstance.open && state.role === 'son') {
-                sendP2P({ type: 'state_update', payload: state });
+            // Unified State Sync: Only Son (the single source of truth Master) broadcasts state changes to prevent loops.
+            if (state.role === 'son') {
+                sendData({ type: 'state_update', payload: state });
             }
         }
 
@@ -1149,6 +1166,11 @@
             
             // Reinitalize P2P to establish customized code/connection rules for new role
             initP2P();
+
+            // Notify Son tab on the same device about the role switch
+            if (role === 'mom') {
+                sendData({ type: 'request_state' });
+            }
             
             cyberAlert("Успішно", `Ви обрали роль: ${role === 'son' ? 'Син' : 'Мама'}`);
         }
@@ -1273,9 +1295,9 @@
             if (state.weather === 'heat' && q.loc === 'out') mult += 0.5; // Outdoors gets +50% CP
 
             // 3. Pets synergy (+20% CP bonus for tasks associated with them if pet is at 100% fullness)
-            if (q.tag === 'cat' && state.pets.kitty.hunger >= 100) mult += 0.20;
-            if (q.tag === 'dog' && state.pets.pirate.hunger >= 100) mult += 0.20;
-            if (q.tag === 'farm' && state.pets.chickens.hunger >= 100) mult += 0.20;
+            if (q.tag === 'cat' && state.pets.kitty && state.pets.kitty.hunger >= 100) mult += 0.20;
+            if (q.tag === 'dog' && state.pets.pirate && state.pets.pirate.hunger >= 100) mult += 0.20;
+            if (q.tag === 'farm' && state.pets.chickens && state.pets.chickens.hunger >= 100) mult += 0.20;
 
             // 4. Double Luck Buff active
             if (state.activeBuffs && state.activeBuffs.luckTimer > 0) {
@@ -1287,6 +1309,7 @@
 
         function renderQuests() {
             const container = document.getElementById('quests-container');
+            if (!container) return;
             container.innerHTML = '';
             
             // Filter both default pre-configured and custom mom created tasks
@@ -1337,7 +1360,7 @@
                     if (qState.status === 'open') {
                         btnHtml = `<button onclick="completeQuest('${q.id}')" class="bg-sky-600 hover:bg-sky-500 text-slate-950 text-xs px-3 py-1.5 rounded-lg font-bold">Виконав</button>`;
                     } else if (qState.status === 'pending') {
-                        btnHtml = `<span class="text-xs text-yellow-400 font-semibold">На перевірці</span>`;
+                        btnHtml = `<span class="text-xs text-yellow-400 font-semibold text-center">На перевірці</span>`;
                         borderClass = 'border-yellow-500/50 bg-yellow-950/20';
                     } else if (qState.status === 'done') {
                         btnHtml = `<span class="text-xs text-emerald-400 font-bold">✔ Виконано</span>`;
@@ -1360,7 +1383,7 @@
 
                 container.innerHTML += `
                     <div class="bg-slate-950 p-3 rounded-xl border ${borderClass} flex justify-between items-center transition-all">
-                        <div class="space-y-0.5">
+                        <div class="space-y-0.5 max-w-[70%]">
                             <div class="font-bold text-white text-sm">${q.title}</div>
                             <div class="text-[10px] text-slate-400">${q.desc}</div>
                             <div class="text-xs font-semibold text-sky-400 font-mono pt-1">
@@ -1375,6 +1398,9 @@
 
         function completeQuest(id) {
             playSound('click');
+            if (!state.questsState[id]) {
+                state.questsState[id] = { status: 'open' };
+            }
             state.questsState[id].status = 'pending';
             
             // Check achievements triggers
@@ -1382,18 +1408,15 @@
             trackAchievementProgress('a2', 1);
             trackAchievementProgress('a3', 1);
 
-            saveState(); // Saves locally and syncs to Mom if connected
+            saveState(); // Saves locally and broadcasts update instantly to other tab/peer
 
-            if (peerConnInstance && peerConnInstance.open) {
-                // Broadcast notify event so Mom gets alert
-                sendP2P({ type: 'notify_quest_pending', title: state.questsData.find(x => x.id === id).title });
-            }
+            sendData({ type: 'notify_quest_pending', title: state.questsData.find(x => x.id === id).title });
             cyberAlert("Відправлено", "Завдання успішно відправлено мамі на перевірку!");
         }
 
         function momApproveQuest(id, approved) {
             runMomAction('approve_quest', { id: id, approved: approved });
-            if (!(peerConnInstance && peerConnInstance.open)) {
+            if (!(peerConnInstance && peerConnInstance.open) && !localChannel) {
                 cyberAlert(approved ? "Схвалено!" : "Відхилено", "Зміни внесено локально.");
             }
         }
@@ -1413,7 +1436,7 @@
                     
                     container.innerHTML += `
                         <div class="bg-slate-900 p-2.5 rounded-lg border border-yellow-500/30 flex justify-between items-center text-xs">
-                            <div>
+                            <div class="max-w-[70%]">
                                 <div class="font-bold text-white">${q.title}</div>
                                 <div class="text-[10px] text-yellow-400 font-semibold">+${finalCp} СР</div>
                             </div>
@@ -1448,6 +1471,7 @@
         // -----------------------------------------
         function renderBusiness() {
             const list = document.getElementById('business-list');
+            if (!list) return;
             list.innerHTML = '';
             
             state.businesses.forEach(b => {
@@ -1661,6 +1685,7 @@
             let now = Date.now();
             let savedCooldown = localStorage.getItem('cyber_wheel_cooldown') || 0;
             const timerEl = document.getElementById('wheel-timer');
+            if (!timerEl) return;
             if (now - savedCooldown < 12 * 60 * 60 * 1000) {
                 let remainSecs = Math.ceil(((12 * 60 * 60 * 1000) - (now - savedCooldown)) / 1000);
                 let hrs = Math.floor(remainSecs / 3600);
@@ -1719,6 +1744,7 @@
 
         function moveBreachNode() {
             const node = document.getElementById('breach-node');
+            if (!node) return;
             let x = Math.floor(Math.random() * 70) + 10; // offset bounds
             let y = Math.floor(Math.random() * 70) + 10;
             node.style.left = x + '%';
@@ -1793,8 +1819,8 @@
                     state.inventory.energy = (state.inventory.energy || 0) + 1;
                     cyberAlert("Куплено!", "Кібер-Енергетик успішно завантажено у твій інвентар!");
                 } else {
-                    // Send to Mom via P2P if active or show simulated success screen
-                    sendP2P({ type: 'reward_purchase', payload: { title, cost } });
+                    // Send to Mom via local/remote P2P sync
+                    sendData({ type: 'reward_purchase', payload: { title, cost } });
                     cyberAlert("Успіх!", `Запит на купівлю "${title}" за ${cost} CP надіслано мамі. Покажіть їй екран для видачі винагороди!`);
                 }
                 saveState();
@@ -1809,6 +1835,7 @@
         // -----------------------------------------
         function renderPets() {
             const container = document.getElementById('pets-container');
+            if (!container) return;
             container.innerHTML = '';
             
             for (let key in state.pets) {
@@ -1871,6 +1898,7 @@
 
         function renderAchievements() {
             const container = document.getElementById('achievements-container');
+            if (!container) return;
             container.innerHTML = '';
             
             state.achievements.forEach(a => {
@@ -1893,10 +1921,29 @@
         }
 
         // -----------------------------------------
-        // 10. PEERJS DIRECT DEVICE-TO-DEVICE NETWORK
+        // 10. UNIFIED MULTI-CHANNEL DATA ROUTING (P2P + TABS)
         // -----------------------------------------
         let peerInstance = null;
         let peerConnInstance = null;
+
+        function sendData(data) {
+            // Channel A: Remote Device (PeerJS Network Connection)
+            if (peerConnInstance && peerConnInstance.open) {
+                try {
+                    peerConnInstance.send(data);
+                } catch(e) {
+                    console.error("PeerJS transmission failure", e);
+                }
+            }
+            // Channel B: Local Browser Tabs (BroadcastChannel API)
+            if (localChannel) {
+                try {
+                    localChannel.postMessage(data);
+                } catch(e) {
+                    console.error("Local BroadcastChannel transmission failure", e);
+                }
+            }
+        }
 
         function initP2P() {
             if (!state.role) return;
@@ -1916,10 +1963,10 @@
 
             if (isSocketBlocked) {
                 document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-yellow-500 shadow-[0_0_8px_#eab308]";
-                document.getElementById('status-led').title = "Офлайн-режим (Обмеження)";
+                document.getElementById('status-led').title = "Локальний режим (Вкладки)";
                 const connTxt = document.getElementById('conn-text');
-                if (connTxt) connTxt.innerText = "Офлайн-режим (Обмеження)";
-                return; // Gracefully fall back to local offline sync codes
+                if (connTxt) connTxt.innerText = "Локальний режим (Вкладки)";
+                return; // Gracefully fall back to local offline sync codes & BroadcastChannel
             }
 
             try {
@@ -1928,9 +1975,7 @@
                     peerInstance.destroy();
                 }
 
-                // Custom ID mapping rules based on Role:
-                // Son: cyber-son-XXXX (where XXXX is his 4-digit code)
-                // Mom: random peer ID (since she connects, she doesn't need a static predictable ID)
+                // Custom ID mapping rules based on Role
                 let myCustomId = null;
                 if (state.role === 'son') {
                     myCustomId = 'cyber-son-' + state.peerCode;
@@ -1980,7 +2025,7 @@
                 if (connTxt) connTxt.innerText = "З'єднано";
                 document.getElementById('status-led').className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]";
                 if (state.role === 'mom') {
-                    sendP2P({ type: 'request_state' });
+                    sendData({ type: 'request_state' });
                 }
             });
             conn.on('data', (data) => {
@@ -1988,13 +2033,9 @@
             });
         }
 
-        function sendP2P(data) {
-            if (peerConnInstance && peerConnInstance.open) {
-                peerConnInstance.send(data);
-            }
-        }
-
         function handleNetworkData(data) {
+            if (!data) return;
+
             if (data.type === 'mom_action') {
                 // Son (Master) receives transaction from Mom, runs it, saves, and broadcasts state back.
                 applyMomActionLocally(data.action, data.payload);
@@ -2008,7 +2049,6 @@
                 const oldPin = state.pin;
                 const oldPeerCode = state.peerCode;
                 
-                // Clear state keys while keeping the reference intact!
                 for (let key in state) {
                     delete state[key];
                 }
@@ -2018,14 +2058,15 @@
                 state.pin = oldPin;
                 state.peerCode = oldPeerCode;
                 
-                saveState();
+                // Save specifically to Mom's key
+                localStorage.setItem('cybercore_save_mom', JSON.stringify(state));
+                updateUI();
             } else if (data.type === 'notify_quest_pending' && state.role === 'mom') {
                 playSound('coin');
                 cyberAlert("Увага!", `Син надіслав нове виконане завдання на перевірку: "${data.title}"`);
-                // Forces UI update of pending list directly on message receipt
                 renderMomPendingQuests();
             } else if (data.type === 'request_state' && state.role === 'son') {
-                sendP2P({ type: 'state_update', payload: state });
+                sendData({ type: 'state_update', payload: state });
             } else if (data.type === 'reward_purchase' && state.role === 'mom') {
                 cyberAlert("Покупка в Магазині!", `Син просить видати нагороду: "${data.payload.title}" (Вартість: ${data.payload.cost} CP)`);
             }
@@ -2035,6 +2076,10 @@
             if (actionType === 'approve_quest') {
                 let q = state.questsData.find(x => x.id === payload.id);
                 if (!q) return;
+
+                if (!state.questsState[payload.id]) {
+                    state.questsState[payload.id] = { status: 'open' };
+                }
 
                 if (payload.approved) {
                     state.questsState[payload.id].status = 'done';
@@ -2118,13 +2163,12 @@
         // 11. MOM CONTROLS, OFF-BRIDGE SYNC & CODES
         // -----------------------------------------
         function runMomAction(actionType, payload) {
-            if (peerConnInstance && peerConnInstance.open) {
-                sendP2P({ type: 'mom_action', action: actionType, payload: payload });
-            } else {
-                // Offline fallback: apply directly to local state
-                applyMomActionLocally(actionType, payload);
-                saveState();
-            }
+            // Apply immediately to Mom's local state so she sees it instantly
+            applyMomActionLocally(actionType, payload);
+            saveState();
+
+            // Broadcast the transaction so other tab (Son) can run it & sync back
+            sendData({ type: 'mom_action', action: actionType, payload: payload });
         }
 
         function checkMomPin() {
@@ -2152,9 +2196,6 @@
         function momAction(type) {
             let amount = type === 'reward' ? 50 : -50;
             runMomAction('adjust_cp', { amount: amount });
-            if (!(peerConnInstance && peerConnInstance.open)) {
-                cyberAlert(type === 'reward' ? "Премія!" : "Штраф!", "Зміни внесено локально.");
-            }
         }
 
         function setMomMood(mood) {
@@ -2345,7 +2386,6 @@
                     try {
                         let parsed = JSON.parse(decodeURIComponent(escape(atob(val))));
                         if (parsed.questsData && parsed.cp !== undefined) {
-                            // Mutation in place to preserve reference
                             for (let key in state) delete state[key];
                             Object.assign(state, parsed);
                             saveState();
@@ -2389,8 +2429,7 @@
             input.value = '';
             
             if (peerConnInstance && peerConnInstance.open) {
-                // Mom sends chat event to Son's Master state
-                sendP2P({ type: 'chat_message_req', payload: msg });
+                sendData({ type: 'chat_message_req', payload: msg });
             } else {
                 state.chatHistory.push(msg);
                 saveState();
